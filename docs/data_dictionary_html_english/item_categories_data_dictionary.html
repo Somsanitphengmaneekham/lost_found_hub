@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Item Categories</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  body { font-family: "Times New Roman", Times, Georgia, serif; color: #000; }
+  .dictionary { width: 1600px; margin: 24px; border: 3px solid #111; background: #fff; }
+  .title { font-weight: 700; font-size: 42px; text-align: center; padding: 14px 20px 12px; border-bottom: 2px solid #111; line-height: 1.1; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th, td { border: 1.5px solid #111; padding: 10px 12px; font-size: 30px; line-height: 1.14; vertical-align: middle; overflow-wrap: anywhere; }
+  th { font-size: 32px; font-weight: 700; text-align: center; }
+  td.name { font-size: 30px; }
+  .center { text-align: center; }
+  .ref { font-size: 28px; }
+  col.field { width: 19.2%; }
+  col.type { width: 11.6%; }
+  col.size { width: 9.6%; }
+  col.null { width: 9.6%; }
+  col.desc { width: 27.2%; }
+  col.key { width: 8.4%; }
+  col.ref { width: 14.4%; }
+</style>
+</head>
+<body>
+<div class="dictionary">
+  <div class="title">Item Categories</div>
+  <table>
+    <colgroup>
+      <col class="field"><col class="type"><col class="size"><col class="null"><col class="desc"><col class="key"><col class="ref">
+    </colgroup>
+    <thead>
+      <tr>
+        <th>Field Name</th>
+        <th>Data<br>Type</th>
+        <th>Field<br>Size</th>
+        <th>Not<br>Null</th>
+        <th>Description</th>
+        <th>Key</th>
+        <th>Reference</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="name">id</td>
+      <td class="center">INT</td>
+      <td class="center">10</td>
+      <td class="center">Yes</td>
+      <td>Primary record ID</td>
+      <td class="center">PK</td>
+      <td class="center ref"></td>
+    </tr>
+    <tr>
+      <td class="name">name_th</td>
+      <td class="center">VARCHAR</td>
+      <td class="center">120</td>
+      <td class="center">Yes</td>
+      <td>Item category name in Lao</td>
+      <td class="center"></td>
+      <td class="center ref"></td>
+    </tr>
+    <tr>
+      <td class="name">description</td>
+      <td class="center">TEXT</td>
+      <td class="center">-</td>
+      <td class="center">No</td>
+      <td>Category description</td>
+      <td class="center"></td>
+      <td class="center ref"></td>
+    </tr>
+    <tr>
+      <td class="name">is_active</td>
+      <td class="center">TINYINT</td>
+      <td class="center">1</td>
+      <td class="center">Yes</td>
+      <td>Active flag</td>
+      <td class="center"></td>
+      <td class="center ref"></td>
+    </tr>
+    <tr>
+      <td class="name">created_at</td>
+      <td class="center">DATETIME</td>
+      <td class="center">-</td>
+      <td class="center">Yes</td>
+      <td>Created date and time</td>
+      <td class="center"></td>
+      <td class="center ref"></td>
+    </tr>
+    <tr>
+      <td class="name">updated_at</td>
+      <td class="center">DATETIME</td>
+      <td class="center">-</td>
+      <td class="center">Yes</td>
+      <td>Updated date and time</td>
+      <td class="center"></td>
+      <td class="center ref"></td>
+    </tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

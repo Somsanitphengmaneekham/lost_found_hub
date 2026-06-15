@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" role="img" aria-labelledby="title desc">
+  <title id="title">Dorm room keys</title>
+  <desc id="desc">A key ring with two silver keys and a black fob.</desc>
+  <defs>
+    <linearGradient id="surface" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f7f9fa"/>
+      <stop offset="1" stop-color="#d9e2e7"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="240" fill="url(#surface)"/>
+  <ellipse cx="166" cy="154" rx="88" ry="17" fill="#8296a4" opacity=".18"/>
+  <circle cx="111" cy="99" r="34" fill="none" stroke="#aab8c0" stroke-width="12"/>
+  <path d="M132 124 226 178" stroke="#c3cdd3" stroke-width="24" stroke-linecap="round"/>
+  <path d="M210 167h39v16h-17v15h-18v-15h-4z" fill="#c3cdd3"/>
+  <path d="M142 108 238 88" stroke="#e5ebee" stroke-width="22" stroke-linecap="round"/>
+  <path d="M224 91h39v16h-18v15h-17v-15h-4z" fill="#e5ebee"/>
+  <path d="M95 116c20-20 54-19 73 3 13 15 12 39-2 54l-18 18c-15 15-39 15-54 0l-10-10c-15-15-15-39 0-54l11-11Z" fill="#1d2b36" stroke="#334554" stroke-width="5"/>
+  <circle cx="126" cy="139" r="13" fill="#f6fafc"/>
+</svg>

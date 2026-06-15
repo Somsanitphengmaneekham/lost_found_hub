@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" role="img" aria-labelledby="title desc">
+  <title id="title">White wireless earbuds case</title>
+  <desc id="desc">A white earbud case on a cool gray tabletop.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f8fbfc"/>
+      <stop offset="1" stop-color="#dce8ed"/>
+    </linearGradient>
+    <linearGradient id="case" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#d9e2e7"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="240" fill="url(#bg)"/>
+  <ellipse cx="160" cy="172" rx="86" ry="18" fill="#8296a4" opacity=".18"/>
+  <path d="M98 92c0-19 15-34 34-34h56c19 0 34 15 34 34v53c0 20-16 36-36 36h-52c-20 0-36-16-36-36V92Z" fill="url(#case)" stroke="#b7c6cf" stroke-width="4"/>
+  <path d="M106 102h108" stroke="#bdcbd3" stroke-width="4" stroke-linecap="round"/>
+  <rect x="148" y="131" width="24" height="6" rx="3" fill="#aebcc5"/>
+  <path d="M126 66c-14-6-29 4-31 20-2 19 12 34 29 34 10 0 18-5 22-13" fill="none" stroke="#eef4f7" stroke-width="18" stroke-linecap="round"/>
+  <path d="M194 66c14-6 29 4 31 20 2 19-12 34-29 34-10 0-18-5-22-13" fill="none" stroke="#eef4f7" stroke-width="18" stroke-linecap="round"/>
+</svg>

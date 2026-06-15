@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lost & Found Hub — Database ERD</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f8f9fa; font-family: 'Segoe UI', Arial, sans-serif; }
+
+    .page {
+      width: 2480px;
+      min-height: 1720px;
+      position: relative;
+      background: #f4f6f8;
+    }
+
+    /* ── Header bar ── */
+    .erd-header {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 60px;
+      background: #1e293b;
+      display: flex;
+      align-items: center;
+      padding: 0 40px;
+      gap: 20px;
+    }
+    .erd-header h1 {
+      color: #fff;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .erd-header p {
+      color: #94a3b8;
+      font-size: 11.5px;
+    }
+    .erd-header-actions {
+      margin-left: auto;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .btn-export {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      height: 36px;
+      padding: 0 18px;
+      border-radius: 7px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      transition: all 0.18s;
+    }
+    .btn-export-png {
+      background: #10b981;
+      color: #fff;
+    }
+    .btn-export-png:hover { background: #059669; }
+    .btn-export-png:disabled { background: #6ee7b7; cursor: not-allowed; }
+    .btn-export-pdf {
+      background: #3b82f6;
+      color: #fff;
+    }
+    .btn-export-pdf:hover { background: #2563eb; }
+
+    /* ── Export overlay ── */
+    .export-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.75);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .export-overlay.active { display: flex; }
+    .export-spinner {
+      width: 52px; height: 52px;
+      border: 5px solid rgba(255,255,255,0.2);
+      border-top-color: #10b981;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .export-msg {
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .export-sub {
+      color: #94a3b8;
+      font-size: 12px;
+    }
+
+    /* ── Group zone backgrounds ── */
+    .zone {
+      position: absolute;
+      border-radius: 12px;
+      border: 2px dashed;
+    }
+    .zone-label {
+      position: absolute;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1.6px;
+      border-radius: 4px;
+      padding: 2px 8px;
+    }
+
+    .zone-master { background: #f0fdfa; border-color: #99f6e4; }
+    .zone-master .zone-label { color: #0f766e; background: #ccfbf1; }
+    .zone-users  { background: #eff6ff; border-color: #bfdbfe; }
+    .zone-users .zone-label  { color: #1d4ed8; background: #dbeafe; }
+    .zone-posts  { background: #fffbeb; border-color: #fde68a; }
+    .zone-posts .zone-label  { color: #92400e; background: #fef3c7; }
+    .zone-media  { background: #f5f3ff; border-color: #ddd6fe; }
+    .zone-media .zone-label  { color: #6d28d9; background: #ede9fe; }
+    .zone-workflow { background: #f0fdf4; border-color: #bbf7d0; }
+    .zone-workflow .zone-label { color: #15803d; background: #dcfce7; }
+
+    /* ── Table box ── */
+    .tbl {
+      position: absolute;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+      min-width: 310px;
+      font-size: 11.5px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12), 0 0 0 1.5px rgba(0,0,0,0.08);
+    }
+
+    .tbl-head {
+      padding: 7px 12px;
+      font-weight: 800;
+      font-size: 13px;
+      text-align: center;
+      letter-spacing: 0.3px;
+      color: #fff;
+      border-bottom: 2px solid rgba(0,0,0,0.15);
+    }
+
+    /* Group header colors */
+    .head-master   { background: #0d9488; }
+    .head-users    { background: #2563eb; }
+    .head-posts-l  { background: #d97706; }
+    .head-posts-f  { background: #b45309; }
+    .head-media    { background: #7c3aed; }
+    .head-workflow { background: #16a34a; }
+
+    /* ── Column rows ── */
+    .cr {
+      display: grid;
+      grid-template-columns: 32px 175px 1fr;
+      min-height: 22px;
+      align-items: center;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .cr:last-child { border-bottom: none; }
+    .cr:hover { background: #f8fafc; }
+
+    .cr-sep {
+      height: 1px;
+      background: #e2e8f0;
+      grid-column: 1 / -1;
+      margin: 1px 0;
+    }
+
+    .cr-badge {
+      border-right: 1px solid #e2e8f0;
+      text-align: center;
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 2px 0;
+      min-height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pk-badge { color: #92400e; background: #fef9c3; }
+    .fk-badge { color: #1e40af; background: #eff6ff; }
+
+    .cr-name {
+      padding: 2px 8px;
+      font-weight: 600;
+      color: #1e293b;
+      font-size: 11.5px;
+    }
+    .cr-name.is-pk {
+      font-weight: 800;
+      text-decoration: underline dotted #999;
+    }
+    .cr-name.is-fk { font-style: italic; color: #3b5bdb; }
+
+    .cr-type {
+      padding: 2px 8px 2px 4px;
+      color: #64748b;
+      font-size: 9.5px;
+      font-family: 'Courier New', monospace;
+    }
+    .nn  { color: #dc2626; font-weight: 700; }
+    .uq  { color: #0369a1; font-weight: 700; }
+    .ai  { color: #7c3aed; font-weight: 700; }
+    .def { color: #15803d; font-weight: 700; }
+
+    /* ── Legend box ── */
+    .legend {
+      position: absolute;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      padding: 14px 18px;
+      font-size: 11px;
+      min-width: 200px;
+    }
+    .legend h3 {
+      font-size: 12px;
+      font-weight: 800;
+      color: #1e293b;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .leg-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; color: #475569; }
+    .leg-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 16px; border-radius: 3px;
+      font-size: 9px; font-weight: 800;
+    }
+    .leg-pk-b { background: #fef9c3; color: #92400e; }
+    .leg-fk-b { background: #eff6ff; color: #1e40af; }
+    .leg-swatch {
+      width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0;
+    }
+
+    /* ── SVG lines ── */
+    svg.lines {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: visible;
+    }
+  </style>
+</head>
+<body>
+<div class="page" id="page">
+
+  <!-- ── Header ── -->
+  <div class="erd-header">
+    <h1>📊 Lost &amp; Found Hub — Database Entity Relationship Diagram</h1>
+    <p>Database: lost_found_hub &nbsp;|&nbsp; MySQL 8.0+ / MariaDB 10.6+ &nbsp;|&nbsp; Charset: utf8mb4_unicode_ci &nbsp;|&nbsp; 12 Tables &nbsp;|&nbsp; 7 Reporting Views</p>
+    <div class="erd-header-actions">
+      <button class="btn-export btn-export-png" id="btnPng" onclick="exportPNG(2)">
+        🖼️ Export PNG (2×)
+      </button>
+      <button class="btn-export btn-export-png" id="btnPng3" onclick="exportPNG(3)" style="background:#0d9488;">
+        🖼️ Export PNG (3× HiRes)
+      </button>
+      <button class="btn-export btn-export-pdf" onclick="window.print()">
+        🖨️ Print / PDF
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Export Overlay ── -->
+  <div class="export-overlay" id="exportOverlay">
+    <div class="export-spinner"></div>
+    <div class="export-msg" id="exportMsg">กำลัง render PNG...</div>
+    <div class="export-sub" id="exportSub">อาจใช้เวลา 10-30 วินาที ขึ้นอยู่กับขนาดหน้า</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       GROUP ZONES (background areas)
+  ══════════════════════════════════════════════ -->
+
+  <!-- Master Data zone -->
+  <div class="zone zone-master" style="left:40px; top:80px; width:1560px; height:215px;">
+    <div class="zone-label" style="left:14px; top:10px;">📋 Master Data</div>
+  </div>
+
+  <!-- Users zone -->
+  <div class="zone zone-users" style="left:40px; top:310px; width:480px; height:530px;">
+    <div class="zone-label" style="left:14px; top:10px;">👤 Users</div>
+  </div>
+
+  <!-- Posts zone -->
+  <div class="zone zone-posts" style="left:540px; top:310px; width:1060px; height:530px;">
+    <div class="zone-label" style="left:14px; top:10px;">📄 Posts</div>
+  </div>
+
+  <!-- Media zone -->
+  <div class="zone zone-media" style="left:40px; top:860px; width:1060px; height:340px;">
+    <div class="zone-label" style="left:14px; top:10px;">🖼️ Media &amp; Uploads</div>
+  </div>
+
+  <!-- Workflow zone -->
+  <div class="zone zone-workflow" style="left:540px; top:1220px; width:1120px; height:440px;">
+    <div class="zone-label" style="left:14px; top:10px;">⚙️ Workflow</div>
+  </div>
+
+  <!-- Workflow zone right -->
+  <div class="zone zone-workflow" style="left:1620px; top:860px; width:820px; height:800px;">
+    <div class="zone-label" style="left:14px; top:10px;">⚙️ Workflow (Records)</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TABLE: departments
+  ══════════════════════════════════════════════ -->
+  <div class="tbl" id="t_dept" style="left:60px; top:110px;">
+    <div class="tbl-head head-master">departments</div>
+    <div class="cr"><div class="cr-badge pk-badge">PK</div><div class="cr-name is-pk">id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> <span class="ai">AI</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">code</div><div class="cr-type">VARCHAR(30) <span class="nn">NN</span> <span class="uq">UQ</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">name_th</div><div class="cr-type">VARCHAR(160) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">name_en</div><div class="cr-type">VARCHAR(160)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">is_active</div><div class="cr-type">TINYINT(1) <span class="nn">NN</span> <span class="def">DEF 1</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">created_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">updated_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TABLE: item_categories
+  ══════════════════════════════════════════════ -->
+  <div class="tbl" id="t_cat" style="left:500px; top:110px;">
+    <div class="tbl-head head-master">item_categories</div>
+    <div class="cr"><div class="cr-badge pk-badge">PK</div><div class="cr-name is-pk">id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> <span class="ai">AI</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">name_th</div><div class="cr-type">VARCHAR(120) <span class="nn">NN</span> <span class="uq">UQ</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">description</div><div class="cr-type">TEXT</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">is_active</div><div class="cr-type">TINYINT(1) <span class="nn">NN</span> <span class="def">DEF 1</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">created_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">updated_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TABLE: locations
+  ══════════════════════════════════════════════ -->
+  <div class="tbl" id="t_loc" style="left:960px; top:110px;">
+    <div class="tbl-head head-master">locations</div>
+    <div class="cr"><div class="cr-badge pk-badge">PK</div><div class="cr-name is-pk">id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> <span class="ai">AI</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">name_th</div><div class="cr-type">VARCHAR(180) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">building</div><div class="cr-type">VARCHAR(120)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">floor</div><div class="cr-type">VARCHAR(40)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">detail</div><div class="cr-type">TEXT</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">location_type</div><div class="cr-type">ENUM(found|lost|both|handover) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">is_active</div><div class="cr-type">TINYINT(1) <span class="nn">NN</span> <span class="def">DEF 1</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">created_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">updated_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TABLE: members
+  ══════════════════════════════════════════════ -->
+  <div class="tbl" id="t_members" style="left:60px; top:340px; min-width:460px;">
+    <div class="tbl-head head-users">members</div>
+    <div class="cr"><div class="cr-badge pk-badge">PK</div><div class="cr-name is-pk">id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> <span class="ai">AI</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">role</div><div class="cr-type">ENUM(student | teacher) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">username</div><div class="cr-type">VARCHAR(80) <span class="nn">NN</span> <span class="uq">UQ</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">password_hash</div><div class="cr-type">VARCHAR(255) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">student_code</div><div class="cr-type">VARCHAR(30) <span class="uq">UQ</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">employee_code</div><div class="cr-type">VARCHAR(30) <span class="uq">UQ</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">first_name</div><div class="cr-type">VARCHAR(120) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">last_name</div><div class="cr-type">VARCHAR(120) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">email</div><div class="cr-type">VARCHAR(180) <span class="nn">NN</span> <span class="uq">UQ</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">phone</div><div class="cr-type">VARCHAR(40)</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">department_id</div><div class="cr-type">INT UNSIGNED → departments.id</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">identity_status</div><div class="cr-type">ENUM(pending|verified|rejected) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">card_image_url</div><div class="cr-type">VARCHAR(2048)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">avatar_url</div><div class="cr-type">VARCHAR(2048)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">is_active</div><div class="cr-type">TINYINT(1) <span class="nn">NN</span> <span class="def">DEF 1</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">last_login_at</div><div class="cr-type">DATETIME</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">created_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">updated_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TABLE: lost_posts
+  ══════════════════════════════════════════════ -->
+  <div class="tbl" id="t_lost" style="left:560px; top:340px; min-width:430px;">
+    <div class="tbl-head head-posts-l">lost_posts</div>
+    <div class="cr"><div class="cr-badge pk-badge">PK</div><div class="cr-name is-pk">id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> <span class="ai">AI</span></div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">owner_id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> → members.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">category_id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> → item_categories.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">lost_location_id</div><div class="cr-type">INT UNSIGNED → locations.id</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">title</div><div class="cr-type">VARCHAR(180) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">description</div><div class="cr-type">TEXT <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">color</div><div class="cr-type">VARCHAR(80)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">brand</div><div class="cr-type">VARCHAR(120)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">unique_mark</div><div class="cr-type">TEXT</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">lost_at</div><div class="cr-type">DATETIME</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">contact_name</div><div class="cr-type">VARCHAR(160)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">contact_channel</div><div class="cr-type">VARCHAR(180)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">status</div><div class="cr-type">ENUM(draft|pending_approval|published|matched|closed|rejected|deleted) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">created_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">updated_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">deleted_at</div><div class="cr-type">DATETIME</div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TABLE: found_posts
+  ══════════════════════════════════════════════ -->
+  <div class="tbl" id="t_found" style="left:1070px; top:340px; min-width:450px;">
+    <div class="tbl-head head-posts-f">found_posts</div>
+    <div class="cr"><div class="cr-badge pk-badge">PK</div><div class="cr-name is-pk">id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> <span class="ai">AI</span></div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">finder_id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> → members.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">category_id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> → item_categories.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">found_location_id</div><div class="cr-type">INT UNSIGNED → locations.id</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">title</div><div class="cr-type">VARCHAR(180) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">description</div><div class="cr-type">TEXT <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">color</div><div class="cr-type">VARCHAR(80)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">brand</div><div class="cr-type">VARCHAR(120)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">unique_mark</div><div class="cr-type">TEXT</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">found_at</div><div class="cr-type">DATETIME</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">status</div><div class="cr-type">ENUM(draft|awaiting_handover|pending_approval|approved|matched|returned|rejected|archived) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">approved_by</div><div class="cr-type">INT UNSIGNED → members.id</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">approved_at</div><div class="cr-type">DATETIME</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">reject_reason</div><div class="cr-type">TEXT</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">created_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">updated_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">deleted_at</div><div class="cr-type">DATETIME</div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TABLE: item_images
+  ══════════════════════════════════════════════ -->
+  <div class="tbl" id="t_images" style="left:60px; top:900px; min-width:420px;">
+    <div class="tbl-head head-media">item_images</div>
+    <div class="cr"><div class="cr-badge pk-badge">PK</div><div class="cr-name is-pk">id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> <span class="ai">AI</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">owner_type</div><div class="cr-type">ENUM(lost_post | found_post) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">lost_post_id</div><div class="cr-type">INT UNSIGNED → lost_posts.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">found_post_id</div><div class="cr-type">INT UNSIGNED → found_posts.id</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">image_url</div><div class="cr-type">VARCHAR(2048) <span class="nn">NN</span> (HTTPS only)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">alt_text</div><div class="cr-type">VARCHAR(180)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">sort_order</div><div class="cr-type">INT <span class="nn">NN</span> <span class="def">DEF 0</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">created_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TABLE: student_card_uploads
+  ══════════════════════════════════════════════ -->
+  <div class="tbl" id="t_card" style="left:560px; top:900px; min-width:430px;">
+    <div class="tbl-head head-media">student_card_uploads</div>
+    <div class="cr"><div class="cr-badge pk-badge">PK</div><div class="cr-name is-pk">id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> <span class="ai">AI</span></div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">member_id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> → members.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">claim_request_id</div><div class="cr-type">INT UNSIGNED → claim_requests.id</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">image_url</div><div class="cr-type">VARCHAR(2048) <span class="nn">NN</span> (HTTPS only)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">status</div><div class="cr-type">ENUM(pending|approved|rejected) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">reviewed_by</div><div class="cr-type">INT UNSIGNED → members.id</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">reviewed_at</div><div class="cr-type">DATETIME</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">reject_reason</div><div class="cr-type">TEXT</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">created_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">updated_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TABLE: matches
+  ══════════════════════════════════════════════ -->
+  <div class="tbl" id="t_matches" style="left:560px; top:1260px; min-width:420px;">
+    <div class="tbl-head head-workflow">matches</div>
+    <div class="cr"><div class="cr-badge pk-badge">PK</div><div class="cr-name is-pk">id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> <span class="ai">AI</span></div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">lost_post_id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> → lost_posts.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">found_post_id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> → found_posts.id</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">match_score</div><div class="cr-type">DECIMAL(5,2) <span class="nn">NN</span> &nbsp;(0.00–100.00)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">status</div><div class="cr-type">ENUM(suggested|confirmed|rejected) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">created_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TABLE: claim_requests
+  ══════════════════════════════════════════════ -->
+  <div class="tbl" id="t_claim" style="left:1070px; top:1240px; min-width:450px;">
+    <div class="tbl-head head-workflow">claim_requests</div>
+    <div class="cr"><div class="cr-badge pk-badge">PK</div><div class="cr-name is-pk">id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> <span class="ai">AI</span></div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">found_post_id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> → found_posts.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">claimant_id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> → members.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">lost_post_id</div><div class="cr-type">INT UNSIGNED → lost_posts.id</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">claim_message</div><div class="cr-type">TEXT <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">status</div><div class="cr-type">ENUM(submitted|under_review|approved|rejected|returned) <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">verified_by</div><div class="cr-type">INT UNSIGNED → members.id</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">verified_at</div><div class="cr-type">DATETIME</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">reject_reason</div><div class="cr-type">TEXT</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">created_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">updated_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TABLE: handover_records
+  ══════════════════════════════════════════════ -->
+  <div class="tbl" id="t_handover" style="left:1650px; top:900px; min-width:420px;">
+    <div class="tbl-head head-workflow">handover_records</div>
+    <div class="cr"><div class="cr-badge pk-badge">PK</div><div class="cr-name is-pk">id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> <span class="ai">AI</span></div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">found_post_id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> → found_posts.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">received_by</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> → members.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">handover_location_id</div><div class="cr-type">INT UNSIGNED → locations.id</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">handed_over_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">proof_image_url</div><div class="cr-type">VARCHAR(2048)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">note</div><div class="cr-type">TEXT</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">created_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       TABLE: return_records
+  ══════════════════════════════════════════════ -->
+  <div class="tbl" id="t_return" style="left:1650px; top:1220px; min-width:420px;">
+    <div class="tbl-head head-workflow">return_records</div>
+    <div class="cr"><div class="cr-badge pk-badge">PK</div><div class="cr-name is-pk">id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> <span class="ai">AI</span></div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">match_id</div><div class="cr-type">INT UNSIGNED → matches.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">found_post_id</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> → found_posts.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">returned_by</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> → members.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">received_by</div><div class="cr-type">INT UNSIGNED <span class="nn">NN</span> → members.id</div></div>
+    <div class="cr"><div class="cr-badge fk-badge">FK</div><div class="cr-name is-fk">return_location_id</div><div class="cr-type">INT UNSIGNED → locations.id</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">proof_image_url</div><div class="cr-type">VARCHAR(2048)</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">note</div><div class="cr-type">TEXT</div></div>
+    <div class="cr"><div class="cr-badge"></div><div class="cr-name">returned_at</div><div class="cr-type">DATETIME <span class="nn">NN</span></div></div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       LEGEND
+  ══════════════════════════════════════════════ -->
+  <div class="legend" style="left:60px; top:1270px;">
+    <h3>🔑 Legend</h3>
+    <div class="leg-row"><span class="leg-badge leg-pk-b">PK</span> Primary Key (underlined)</div>
+    <div class="leg-row"><span class="leg-badge leg-fk-b">FK</span> Foreign Key (italic)</div>
+    <div class="leg-row"><span class="nn" style="font-size:11px; font-weight:800;">NN</span>&nbsp;&nbsp;&nbsp;NOT NULL</div>
+    <div class="leg-row"><span class="uq" style="font-size:11px; font-weight:800;">UQ</span>&nbsp;&nbsp;&nbsp;UNIQUE constraint</div>
+    <div class="leg-row"><span class="ai" style="font-size:11px; font-weight:800;">AI</span>&nbsp;&nbsp;&nbsp;&nbsp;AUTO_INCREMENT</div>
+    <div class="leg-row"><span class="def" style="font-size:11px; font-weight:800;">DEF</span>&nbsp; Default value</div>
+    <hr style="margin: 10px 0; border-color: #e2e8f0;">
+    <h3>🎨 Color Groups</h3>
+    <div class="leg-row"><span class="leg-swatch" style="background:#0d9488;"></span> Master Data</div>
+    <div class="leg-row"><span class="leg-swatch" style="background:#2563eb;"></span> Users / Members</div>
+    <div class="leg-row"><span class="leg-swatch" style="background:#d97706;"></span> Lost Posts</div>
+    <div class="leg-row"><span class="leg-swatch" style="background:#b45309;"></span> Found Posts</div>
+    <div class="leg-row"><span class="leg-swatch" style="background:#7c3aed;"></span> Media & Uploads</div>
+    <div class="leg-row"><span class="leg-swatch" style="background:#16a34a;"></span> Workflow</div>
+    <hr style="margin: 10px 0; border-color: #e2e8f0;">
+    <h3>🔗 Relationship Lines</h3>
+    <div class="leg-row" style="font-size:10px; color:#666;">━━━ Mandatory (NOT NULL FK)</div>
+    <div class="leg-row" style="font-size:10px; color:#666;">╌╌╌ Optional (nullable FK)</div>
+    <div class="leg-row" style="font-size:10px; color:#666;">▶ Arrow = "many" / child side</div>
+  </div>
+
+  <!-- SVG for relationship lines -->
+  <svg class="lines" id="svg"></svg>
+</div>
+
+<!-- ── Export Print styles ── -->
+<style>
+@media print {
+  body { background: white; }
+  .erd-header-actions { display: none !important; }
+  .export-overlay { display: none !important; }
+  .page {
+    width: 100%;
+    transform: scale(0.4);
+    transform-origin: top left;
+  }
+}
+</style>
+
+<script>
+const NS = 'http://www.w3.org/2000/svg';
+const page = document.getElementById('page');
+const svg  = document.getElementById('svg');
+
+function rect(id) {
+  const el = document.getElementById(id);
+  const er = el.getBoundingClientRect();
+  const pr = page.getBoundingClientRect();
+  return {
+    l: er.left - pr.left,  r: er.right  - pr.left,
+    t: er.top  - pr.top,   b: er.bottom - pr.top,
+    cx: er.left - pr.left + er.width  / 2,
+    cy: er.top  - pr.top  + er.height / 2,
+    w: er.width, h: er.height,
+  };
+}
+
+function mkPath(d, color, dashed) {
+  const p = document.createElementNS(NS, 'path');
+  p.setAttribute('d', d);
+  p.setAttribute('stroke', color);
+  p.setAttribute('stroke-width', '1.8');
+  p.setAttribute('fill', 'none');
+  p.setAttribute('stroke-linecap', 'round');
+  p.setAttribute('stroke-linejoin', 'round');
+  if (dashed) p.setAttribute('stroke-dasharray', '6 3');
+  svg.appendChild(p);
+}
+
+function mkArrow(x, y, dir, color) {
+  const s = 7;
+  let pts;
+  if (dir === 'L') pts = `${x},${y} ${x+s},${y-s} ${x+s},${y+s}`;
+  if (dir === 'R') pts = `${x},${y} ${x-s},${y-s} ${x-s},${y+s}`;
+  if (dir === 'U') pts = `${x},${y} ${x-s},${y+s} ${x+s},${y+s}`;
+  if (dir === 'D') pts = `${x},${y} ${x-s},${y-s} ${x+s},${y-s}`;
+  const poly = document.createElementNS(NS, 'polygon');
+  poly.setAttribute('points', pts);
+  poly.setAttribute('fill', color);
+  svg.appendChild(poly);
+}
+
+function mkLabel(x, y, text, color) {
+  const t = document.createElementNS(NS, 'text');
+  t.setAttribute('x', x); t.setAttribute('y', y);
+  t.setAttribute('font-size', '9');
+  t.setAttribute('fill', color || '#888');
+  t.setAttribute('font-family', 'Arial, sans-serif');
+  t.setAttribute('text-anchor', 'middle');
+  const bg = document.createElementNS(NS, 'rect');
+  const w = text.length * 5.5 + 6, h = 12;
+  bg.setAttribute('x', x - w/2); bg.setAttribute('y', y - 10);
+  bg.setAttribute('width', w); bg.setAttribute('height', h);
+  bg.setAttribute('fill', '#fff'); bg.setAttribute('rx', '2');
+  bg.setAttribute('opacity', '0.85');
+  svg.appendChild(bg);
+  svg.appendChild(t);
+  t.textContent = text;
+}
+
+// ─── Connect: from right/left/top/bottom edge to another, with right-angle routing ───
+function connect(fromId, fromSide, toId, toSide, opts = {}) {
+  const { color = '#888', dashed = false, label = '', oy1 = 0, oy2 = 0, ox1 = 0, ox2 = 0 } = opts;
+  const f = rect(fromId);
+  const t = rect(toId);
+  const pad = 16;
+
+  let x1, y1, x2, y2;
+  if (fromSide === 'R') { x1 = f.r; y1 = f.cy + oy1; }
+  if (fromSide === 'L') { x1 = f.l; y1 = f.cy + oy1; }
+  if (fromSide === 'B') { x1 = f.cx + ox1; y1 = f.b; }
+  if (fromSide === 'T') { x1 = f.cx + ox1; y1 = f.t; }
+
+  if (toSide === 'R') { x2 = t.r;  y2 = t.cy + oy2; }
+  if (toSide === 'L') { x2 = t.l;  y2 = t.cy + oy2; }
+  if (toSide === 'B') { x2 = t.cx + ox2; y2 = t.b; }
+  if (toSide === 'T') { x2 = t.cx + ox2; y2 = t.t; }
+
+  let d;
+  if (fromSide === 'R' && toSide === 'L') {
+    const mid = (x1 + x2) / 2;
+    if (Math.abs(y1 - y2) < 6) {
+      d = `M ${x1} ${y1} L ${x2} ${y2}`;
+    } else {
+      d = `M ${x1} ${y1} L ${mid} ${y1} L ${mid} ${y2} L ${x2} ${y2}`;
+    }
+  } else if (fromSide === 'L' && toSide === 'R') {
+    const mid = (x1 + x2) / 2;
+    d = `M ${x1} ${y1} L ${mid} ${y1} L ${mid} ${y2} L ${x2} ${y2}`;
+  } else if (fromSide === 'R' && toSide === 'R') {
+    const rx = Math.max(x1, x2) + pad * 2;
+    d = `M ${x1} ${y1} L ${rx} ${y1} L ${rx} ${y2} L ${x2} ${y2}`;
+  } else if (fromSide === 'L' && toSide === 'L') {
+    const lx = Math.min(x1, x2) - pad * 2;
+    d = `M ${x1} ${y1} L ${lx} ${y1} L ${lx} ${y2} L ${x2} ${y2}`;
+  } else if (fromSide === 'B' && toSide === 'T') {
+    const mid = (y1 + y2) / 2;
+    d = `M ${x1} ${y1} L ${x1} ${mid} L ${x2} ${mid} L ${x2} ${y2}`;
+  } else if (fromSide === 'T' && toSide === 'B') {
+    const mid = (y1 + y2) / 2;
+    d = `M ${x1} ${y1} L ${x1} ${mid} L ${x2} ${mid} L ${x2} ${y2}`;
+  } else if (fromSide === 'B' && toSide === 'L') {
+    d = `M ${x1} ${y1} L ${x1} ${y2} L ${x2} ${y2}`;
+  } else if (fromSide === 'B' && toSide === 'R') {
+    d = `M ${x1} ${y1} L ${x1} ${y2} L ${x2} ${y2}`;
+  } else if (fromSide === 'R' && toSide === 'T') {
+    d = `M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`;
+  } else if (fromSide === 'R' && toSide === 'B') {
+    d = `M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`;
+  } else if (fromSide === 'L' && toSide === 'T') {
+    d = `M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`;
+  } else if (fromSide === 'L' && toSide === 'B') {
+    d = `M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`;
+  } else if (fromSide === 'T' && toSide === 'L') {
+    d = `M ${x1} ${y1} L ${x1} ${y2} L ${x2} ${y2}`;
+  } else if (fromSide === 'T' && toSide === 'R') {
+    d = `M ${x1} ${y1} L ${x1} ${y2} L ${x2} ${y2}`;
+  } else {
+    d = `M ${x1} ${y1} L ${x2} ${y2}`;
+  }
+
+  mkPath(d, color, dashed);
+
+  // Arrow at destination
+  const arrowDir = { L: 'L', R: 'R', T: 'U', B: 'D' };
+  mkArrow(x2, y2, arrowDir[toSide], color);
+
+  // Label
+  if (label) {
+    const lx = (x1 + x2) / 2;
+    const ly = (y1 + y2) / 2 - 6;
+    mkLabel(lx, ly, label, color);
+  }
+}
+
+window.addEventListener('load', () => {
+  // ── TEAL: Master Data → members ──────────────────────────────
+  connect('t_dept', 'B', 't_members', 'T',
+    { color:'#0d9488', label:'department_id', oy2: 0, ox1: 40, ox2: 40 });
+
+  // ── TEAL: item_categories → lost_posts ───────────────────────
+  connect('t_cat', 'B', 't_lost', 'T',
+    { color:'#0d9488', label:'category_id', ox1: -30, ox2: -30 });
+
+  // ── TEAL: item_categories → found_posts ──────────────────────
+  connect('t_cat', 'B', 't_found', 'T',
+    { color:'#0d9488', label:'category_id', ox1: 30, ox2: 30 });
+
+  // ── TEAL: locations → lost_posts ─────────────────────────────
+  connect('t_loc', 'L', 't_lost', 'R',
+    { color:'#0d9488', label:'lost_location_id', oy1: 30, oy2: 30 });
+
+  // ── TEAL: locations → found_posts ────────────────────────────
+  connect('t_loc', 'B', 't_found', 'T',
+    { color:'#0d9488', label:'found_location_id', ox1: 30, ox2: 30 });
+
+  // ── TEAL: locations → handover_records ───────────────────────
+  connect('t_loc', 'R', 't_handover', 'T',
+    { color:'#0d9488', label:'handover_location_id', dashed:true, oy1: 30 });
+
+  // ── TEAL: locations → return_records ─────────────────────────
+  connect('t_loc', 'R', 't_return', 'T',
+    { color:'#0d9488', label:'return_location_id', dashed:true, oy1: 50 });
+
+  // ── BLUE: members → lost_posts ───────────────────────────────
+  connect('t_members', 'R', 't_lost', 'L',
+    { color:'#2563eb', label:'owner_id', oy1: -50, oy2: -50 });
+
+  // ── BLUE: members → found_posts (finder_id) ──────────────────
+  connect('t_members', 'R', 't_found', 'L',
+    { color:'#2563eb', label:'finder_id', oy1: -80, oy2: -80 });
+
+  // ── BLUE: members → found_posts (approved_by) ────────────────
+  connect('t_members', 'R', 't_found', 'L',
+    { color:'#2563eb', label:'approved_by', dashed:true, oy1: 50, oy2: 50 });
+
+  // ── BLUE: members → student_card_uploads ─────────────────────
+  connect('t_members', 'B', 't_images', 'T',
+    { color:'#2563eb', label:'member_id', dashed:true, ox1: -30, ox2: -30 });
+
+  // ── BLUE: members → student_card_uploads (reviewed_by) ───────
+  connect('t_members', 'B', 't_card', 'T',
+    { color:'#2563eb', label:'member_id / reviewed_by', dashed:true, ox1: 30, ox2: 30 });
+
+  // ── BLUE: members → claim_requests.claimant_id ───────────────
+  connect('t_members', 'B', 't_claim', 'L',
+    { color:'#2563eb', label:'claimant_id', oy2: -60 });
+
+  // ── BLUE: members → handover_records.received_by ─────────────
+  connect('t_members', 'R', 't_handover', 'L',
+    { color:'#2563eb', label:'received_by', oy1: 80, oy2: -20 });
+
+  // ── BLUE: members → return_records (returned_by / received_by)
+  connect('t_members', 'R', 't_return', 'L',
+    { color:'#2563eb', label:'returned_by / received_by', oy1: 120, oy2: -10 });
+
+  // ── AMBER: lost_posts → item_images ──────────────────────────
+  connect('t_lost', 'B', 't_images', 'T',
+    { color:'#d97706', label:'lost_post_id', ox1: -20, ox2: -20 });
+
+  // ── AMBER: found_posts → item_images ─────────────────────────
+  connect('t_found', 'B', 't_images', 'R',
+    { color:'#b45309', label:'found_post_id', ox1: 20, oy2: 0 });
+
+  // ── AMBER: lost_posts → matches ──────────────────────────────
+  connect('t_lost', 'B', 't_matches', 'T',
+    { color:'#d97706', label:'lost_post_id', ox1: -20, ox2: -20 });
+
+  // ── AMBER: found_posts → matches ─────────────────────────────
+  connect('t_found', 'B', 't_matches', 'R',
+    { color:'#b45309', label:'found_post_id', ox1: 20, oy2: 20 });
+
+  // ── AMBER: lost_posts → claim_requests ───────────────────────
+  connect('t_lost', 'B', 't_claim', 'T',
+    { color:'#d97706', label:'lost_post_id', dashed:true, ox1: 20, ox2: -20 });
+
+  // ── AMBER: found_posts → claim_requests ──────────────────────
+  connect('t_found', 'B', 't_claim', 'T',
+    { color:'#b45309', label:'found_post_id', ox1: -20, ox2: 20 });
+
+  // ── AMBER: found_posts → handover_records ────────────────────
+  connect('t_found', 'R', 't_handover', 'L',
+    { color:'#b45309', label:'found_post_id', oy1: -60, oy2: -40 });
+
+  // ── AMBER: found_posts → return_records ──────────────────────
+  connect('t_found', 'R', 't_return', 'L',
+    { color:'#b45309', label:'found_post_id', oy1: 60, oy2: -30 });
+
+  // ── GREEN: matches → return_records ──────────────────────────
+  connect('t_matches', 'R', 't_return', 'L',
+    { color:'#16a34a', label:'match_id', dashed:true, oy1: 10, oy2: 10 });
+
+  // ── PURPLE: claim_requests → student_card_uploads ────────────
+  connect('t_claim', 'T', 't_card', 'B',
+    { color:'#7c3aed', label:'claim_request_id', dashed:true, ox1: 30, ox2: 30 });
+});
+</script>
+</body>
+<!-- ── Export PNG Script ── -->
+<script>
+async function exportPNG(scale = 2) {
+  const overlay  = document.getElementById('exportOverlay');
+  const msgEl    = document.getElementById('exportMsg');
+  const subEl    = document.getElementById('exportSub');
+  const btnPng   = document.getElementById('btnPng');
+  const btnPng3  = document.getElementById('btnPng3');
+  const pageEl   = document.getElementById('page');
+
+  // Hide export buttons during capture (so they don't appear in image)
+  btnPng.style.display  = 'none';
+  btnPng3.style.display = 'none';
+
+  // Show overlay
+  overlay.classList.add('active');
+  msgEl.textContent = `กำลัง render PNG ที่ scale ${scale}× ...`;
+  subEl.textContent = `ขนาดภาพ: ${Math.round(pageEl.scrollWidth * scale)} × ${Math.round(pageEl.scrollHeight * scale)} px`;
+
+  // Wait one frame for UI update
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  try {
+    const canvas = await html2canvas(pageEl, {
+      scale: scale,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#f4f6f8',
+      logging: false,
+      width:  pageEl.scrollWidth,
+      height: pageEl.scrollHeight,
+      windowWidth:  pageEl.scrollWidth,
+      windowHeight: pageEl.scrollHeight,
+      x: 0,
+      y: 0,
+      onclone(clonedDoc) {
+        // Ensure the cloned page is full size
+        const cp = clonedDoc.getElementById('page');
+        if (cp) {
+          cp.style.minHeight = pageEl.scrollHeight + 'px';
+        }
+        // Hide overlay in clone
+        const ov = clonedDoc.getElementById('exportOverlay');
+        if (ov) ov.style.display = 'none';
+      }
+    });
+
+    msgEl.textContent = 'กำลัง download...';
+    subEl.textContent = `ขนาดภาพ: ${canvas.width} × ${canvas.height} px`;
+
+    // Download
+    const link = document.createElement('a');
+    link.download = `lost_found_hub_erd_${scale}x_${Date.now()}.png`;
+    link.href = canvas.toDataURL('image/png', 1.0);
+    link.click();
+
+  } catch (err) {
+    msgEl.textContent = '❌ เกิดข้อผิดพลาด';
+    subEl.textContent = err.message;
+    await new Promise(r => setTimeout(r, 3000));
+  } finally {
+    overlay.classList.remove('active');
+    btnPng.style.display  = '';
+    btnPng3.style.display = '';
+  }
+}
+</script>
+
+</html>

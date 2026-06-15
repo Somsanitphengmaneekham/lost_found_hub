@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Report Lost Count By Month</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  body { font-family: "Times New Roman", Times, Georgia, serif; color: #000; }
+  .dictionary { width: 1600px; margin: 24px; border: 3px solid #111; background: #fff; }
+  .title { font-weight: 700; font-size: 42px; text-align: center; padding: 14px 20px 12px; border-bottom: 2px solid #111; line-height: 1.1; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th, td { border: 1.5px solid #111; padding: 10px 12px; font-size: 30px; line-height: 1.14; vertical-align: middle; overflow-wrap: anywhere; }
+  th { font-size: 32px; font-weight: 700; text-align: center; }
+  td.name { font-size: 30px; }
+  .center { text-align: center; }
+  .ref { font-size: 28px; }
+  col.field { width: 19.2%; }
+  col.type { width: 11.6%; }
+  col.size { width: 9.6%; }
+  col.null { width: 9.6%; }
+  col.desc { width: 27.2%; }
+  col.key { width: 8.4%; }
+  col.ref { width: 14.4%; }
+</style>
+</head>
+<body>
+<div class="dictionary">
+  <div class="title">Report Lost Count By Month</div>
+  <table>
+    <colgroup>
+      <col class="field"><col class="type"><col class="size"><col class="null"><col class="desc"><col class="key"><col class="ref">
+    </colgroup>
+    <thead>
+      <tr>
+        <th>Field Name</th>
+        <th>Data<br>Type</th>
+        <th>Field<br>Size</th>
+        <th>Not<br>Null</th>
+        <th>Description</th>
+        <th>Key</th>
+        <th>Reference</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="name">report_month</td>
+      <td class="center">VARCHAR</td>
+      <td class="center">10</td>
+      <td class="center">Yes</td>
+      <td>Month used for lost item reporting</td>
+      <td class="center"></td>
+      <td class="center ref">lost_posts</td>
+    </tr>
+    <tr>
+      <td class="name">lost_count</td>
+      <td class="center">BIGINT</td>
+      <td class="center">20</td>
+      <td class="center">Yes</td>
+      <td>Number of lost item posts</td>
+      <td class="center"></td>
+      <td class="center ref">lost_posts</td>
+    </tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

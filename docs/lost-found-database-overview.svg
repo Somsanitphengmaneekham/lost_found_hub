@@ -1,0 +1,259 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="1450" viewBox="0 0 2000 1450">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#405269"/>
+    </marker>
+    <style>
+      .bg { fill: #f6fafc; }
+      .title { font: 800 36px Tahoma, Arial, sans-serif; fill: #0b2852; }
+      .subtitle { font: 18px Tahoma, Arial, sans-serif; fill: #405269; }
+      .note { font: 15px Tahoma, Arial, sans-serif; fill: #405269; }
+      .table { fill: #ffffff; stroke: #c7d6df; stroke-width: 2; rx: 8; filter: drop-shadow(0 12px 26px rgba(16,33,63,.08)); }
+      .head { fill: #0b2852; rx: 8; }
+      .head2 { fill: #087f75; rx: 8; }
+      .head3 { fill: #e8a000; rx: 8; }
+      .head4 { fill: #405269; rx: 8; }
+      .htext { font: 800 18px Tahoma, Arial, sans-serif; fill: #ffffff; }
+      .field { font: 15px Consolas, "Courier New", monospace; fill: #10213f; }
+      .muted { fill: #5d6f82; }
+      .pk { fill: #087f75; font-weight: 700; }
+      .fk { fill: #1457a8; font-weight: 700; }
+      .line { stroke: #405269; stroke-width: 1.7; fill: none; marker-end: url(#arrow); }
+      .line-soft { stroke: #91a6b3; stroke-width: 1.4; fill: none; marker-end: url(#arrow); }
+      .label { font: 14px Tahoma, Arial, sans-serif; fill: #10213f; }
+      .legend-box { fill: #ffffff; stroke: #c7d6df; stroke-width: 2; rx: 8; }
+      .chip { fill: #e2f4f1; stroke: #9ed7ce; stroke-width: 1; rx: 6; }
+      .chip-text { font: 700 14px Tahoma, Arial, sans-serif; fill: #05645d; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="2000" height="1450"/>
+  <text class="title" x="56" y="58">Lost &amp; Found Hub - Database ERD (XAMPP / MySQL)</text>
+  <text class="subtitle" x="56" y="90">Minimal database overview: core master data, lost/found posts, handover, claim, weighted matches, and return records</text>
+
+  <!-- Relationship lines -->
+  <path class="line-soft" d="M260 204 C300 204 300 164 340 164"/>
+  <text class="label" x="276" y="190">1:M</text>
+
+  <path class="line" d="M650 188 C710 188 700 190 760 190"/>
+  <text class="label" x="678" y="176">owner</text>
+
+  <path class="line" d="M650 252 C710 252 700 585 760 585"/>
+  <text class="label" x="675" y="420">finder</text>
+
+  <path class="line-soft" d="M260 1068 C520 1068 520 248 760 248"/>
+  <text class="label" x="525" y="245">category</text>
+
+  <path class="line-soft" d="M260 1068 C520 1068 520 638 760 638"/>
+  <text class="label" x="525" y="635">category</text>
+
+  <path class="line-soft" d="M260 820 C520 820 520 302 760 302"/>
+  <text class="label" x="525" y="300">lost location</text>
+
+  <path class="line-soft" d="M260 820 C520 820 520 690 760 690"/>
+  <text class="label" x="525" y="687">found location</text>
+
+  <path class="line-soft" d="M1080 198 C1120 198 1120 198 1160 198"/>
+  <text class="label" x="1096" y="186">lost post</text>
+
+  <path class="line-soft" d="M1080 585 C1120 585 1120 320 1160 320"/>
+  <text class="label" x="1110" y="455">found post</text>
+
+  <path class="line" d="M1080 282 C1120 282 1120 448 1160 448"/>
+  <text class="label" x="1110" y="378">images</text>
+
+  <path class="line" d="M1080 670 C1120 670 1120 520 1160 520"/>
+  <text class="label" x="1110" y="605">images</text>
+
+  <path class="line" d="M1080 678 C1120 678 1120 748 1160 748"/>
+  <text class="label" x="1110" y="720">handover</text>
+
+  <path class="line" d="M1080 595 C1290 595 1290 602 1540 602"/>
+  <text class="label" x="1306" y="585">claim request</text>
+
+  <path class="line" d="M1860 650 C1905 650 1905 930 1860 930"/>
+  <text class="label" x="1878" y="796">return</text>
+
+  <path class="line-soft" d="M650 520 C1030 520 1030 640 1540 640"/>
+  <text class="label" x="1010" y="515">claimant</text>
+
+  <path class="line-soft" d="M650 496 C910 496 910 430 1540 610"/>
+  <text class="label" x="906" y="485">student card for claim</text>
+
+  <path class="line-soft" d="M260 852 C840 852 840 842 1160 842"/>
+  <text class="label" x="525" y="845">handover location</text>
+
+  <path class="line-soft" d="M260 884 C930 884 930 965 1540 965"/>
+  <text class="label" x="804" y="900">return location</text>
+
+  <!-- Master data -->
+  <g transform="translate(60 135)">
+    <rect class="table" width="200" height="132"/>
+    <rect class="head4" width="200" height="42"/>
+    <text class="htext" x="18" y="27">departments</text>
+    <text class="field pk" x="16" y="67">PK id</text>
+    <text class="field" x="16" y="92">code</text>
+    <text class="field" x="16" y="117">name_th, name_en</text>
+  </g>
+
+  <g transform="translate(60 760)">
+    <rect class="table" width="200" height="154"/>
+    <rect class="head4" width="200" height="42"/>
+    <text class="htext" x="18" y="27">locations</text>
+    <text class="field pk" x="16" y="67">PK id</text>
+    <text class="field" x="16" y="92">name_th</text>
+    <text class="field" x="16" y="117">building, floor</text>
+    <text class="field" x="16" y="142">location_type</text>
+  </g>
+
+  <g transform="translate(60 1008)">
+    <rect class="table" width="200" height="132"/>
+    <rect class="head4" width="200" height="42"/>
+    <text class="htext" x="18" y="27">item_categories</text>
+    <text class="field pk" x="16" y="67">PK id</text>
+    <text class="field" x="16" y="92">name_th</text>
+    <text class="field" x="16" y="117">description</text>
+  </g>
+
+  <!-- Members -->
+  <g transform="translate(340 125)">
+    <rect class="table" width="310" height="250"/>
+    <rect class="head" width="310" height="42"/>
+    <text class="htext" x="18" y="27">members</text>
+    <text class="field pk" x="16" y="67">PK id</text>
+    <text class="field" x="16" y="92">role: student/teacher/admin</text>
+    <text class="field" x="16" y="117">username, password_hash</text>
+    <text class="field" x="16" y="142">student_code, employee_code</text>
+    <text class="field" x="16" y="167">first_name, last_name</text>
+    <text class="field" x="16" y="192">email, phone</text>
+    <text class="field fk" x="16" y="217">FK department_id</text>
+    <text class="field" x="16" y="242">identity_status</text>
+  </g>
+
+  <g transform="translate(340 455)">
+    <rect class="table" width="310" height="202"/>
+    <rect class="head2" width="310" height="42"/>
+    <text class="htext" x="18" y="27">student_card_uploads</text>
+    <text class="field pk" x="16" y="67">PK id</text>
+    <text class="field fk" x="16" y="92">FK member_id</text>
+    <text class="field fk" x="16" y="117">FK claim_request_id</text>
+    <text class="field" x="16" y="142">image_url</text>
+    <text class="field" x="16" y="167">status</text>
+    <text class="field fk" x="16" y="192">FK reviewed_by</text>
+  </g>
+
+  <!-- Posts -->
+  <g transform="translate(760 125)">
+    <rect class="table" width="320" height="288"/>
+    <rect class="head3" width="320" height="42"/>
+    <text class="htext" x="18" y="27">lost_posts</text>
+    <text class="field pk" x="16" y="67">PK id</text>
+    <text class="field fk" x="16" y="92">FK owner_id</text>
+    <text class="field fk" x="16" y="117">FK category_id</text>
+    <text class="field fk" x="16" y="142">FK lost_location_id</text>
+    <text class="field" x="16" y="167">title, description</text>
+    <text class="field" x="16" y="192">color, brand</text>
+    <text class="field" x="16" y="217">unique_mark</text>
+    <text class="field" x="16" y="242">lost_at, contact_channel</text>
+    <text class="field" x="16" y="267">status</text>
+  </g>
+
+  <g transform="translate(760 515)">
+    <rect class="table" width="320" height="310"/>
+    <rect class="head2" width="320" height="42"/>
+    <text class="htext" x="18" y="27">found_posts</text>
+    <text class="field pk" x="16" y="67">PK id</text>
+    <text class="field fk" x="16" y="92">FK finder_id</text>
+    <text class="field fk" x="16" y="117">FK category_id</text>
+    <text class="field fk" x="16" y="142">FK found_location_id</text>
+    <text class="field" x="16" y="167">title, description</text>
+    <text class="field" x="16" y="192">color, brand</text>
+    <text class="field" x="16" y="217">unique_mark</text>
+    <text class="field" x="16" y="242">found_at, status</text>
+    <text class="field fk" x="16" y="267">FK approved_by</text>
+    <text class="field" x="16" y="292">approved_at, reject_reason</text>
+  </g>
+
+  <!-- Workflow center -->
+  <g transform="translate(1160 125)">
+    <rect class="table" width="300" height="202"/>
+    <rect class="head3" width="300" height="42"/>
+    <text class="htext" x="18" y="27">matches</text>
+    <text class="field pk" x="16" y="67">PK id</text>
+    <text class="field fk" x="16" y="92">FK lost_post_id</text>
+    <text class="field fk" x="16" y="117">FK found_post_id</text>
+    <text class="field" x="16" y="142">match_score</text>
+    <text class="field" x="16" y="167">status: suggested/confirmed</text>
+    <text class="field" x="16" y="192">rejected, created_at</text>
+  </g>
+
+  <g transform="translate(1160 390)">
+    <rect class="table" width="300" height="178"/>
+    <rect class="head2" width="300" height="42"/>
+    <text class="htext" x="18" y="27">item_images</text>
+    <text class="field pk" x="16" y="67">PK id</text>
+    <text class="field" x="16" y="92">owner_type</text>
+    <text class="field fk" x="16" y="117">FK lost_post_id OR</text>
+    <text class="field fk" x="16" y="142">FK found_post_id</text>
+    <text class="field" x="16" y="167">CHECK single owner</text>
+  </g>
+
+  <g transform="translate(1160 690)">
+    <rect class="table" width="300" height="202"/>
+    <rect class="head2" width="300" height="42"/>
+    <text class="htext" x="18" y="27">handover_records</text>
+    <text class="field pk" x="16" y="67">PK id</text>
+    <text class="field fk" x="16" y="92">FK found_post_id</text>
+    <text class="field fk" x="16" y="117">FK received_by</text>
+    <text class="field fk" x="16" y="142">FK handover_location_id</text>
+    <text class="field" x="16" y="167">proof_image_url</text>
+    <text class="field" x="16" y="192">handed_over_at</text>
+  </g>
+
+  <!-- Right side -->
+  <g transform="translate(1540 540)">
+    <rect class="table" width="320" height="250"/>
+    <rect class="head3" width="320" height="42"/>
+    <text class="htext" x="18" y="27">claim_requests</text>
+    <text class="field pk" x="16" y="67">PK id</text>
+    <text class="field fk" x="16" y="92">FK found_post_id</text>
+    <text class="field fk" x="16" y="117">FK claimant_id</text>
+    <text class="field fk" x="16" y="142">FK lost_post_id</text>
+    <text class="field" x="16" y="167">claim_message</text>
+    <text class="field" x="16" y="192">status</text>
+    <text class="field fk" x="16" y="217">FK verified_by</text>
+    <text class="field" x="16" y="242">verified_at, reject_reason</text>
+  </g>
+
+  <g transform="translate(1540 890)">
+    <rect class="table" width="320" height="250"/>
+    <rect class="head2" width="320" height="42"/>
+    <text class="htext" x="18" y="27">return_records</text>
+    <text class="field pk" x="16" y="67">PK id</text>
+    <text class="field fk" x="16" y="92">FK claim_request_id</text>
+    <text class="field fk" x="16" y="117">FK found_post_id</text>
+    <text class="field fk" x="16" y="142">FK returned_by</text>
+    <text class="field fk" x="16" y="167">FK received_by</text>
+    <text class="field fk" x="16" y="192">FK return_location_id</text>
+    <text class="field" x="16" y="217">proof_image_url, note</text>
+    <text class="field" x="16" y="242">returned_at</text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(60 1230)">
+    <rect class="legend-box" width="1800" height="150"/>
+    <text class="subtitle" x="24" y="36">Legend / หมายเหตุ</text>
+    <rect class="chip" x="24" y="58" width="86" height="30"/>
+    <text class="chip-text" x="67" y="79" text-anchor="middle">PK</text>
+    <text class="note" x="122" y="79">Primary Key</text>
+    <rect class="chip" x="300" y="58" width="86" height="30"/>
+    <text class="chip-text" x="343" y="79" text-anchor="middle">FK</text>
+    <text class="note" x="398" y="79">Foreign Key / ความสัมพันธ์ระหว่างตาราง</text>
+    <rect class="chip" x="735" y="58" width="210" height="30"/>
+    <text class="chip-text" x="840" y="79" text-anchor="middle">Weighted Score</text>
+    <text class="note" x="965" y="79">คำนวณใน Node.js API แล้วบันทึกผลที่คะแนนตั้งแต่ 70 ขึ้นไปลงตาราง matches</text>
+    <rect class="chip" x="735" y="102" width="210" height="30"/>
+    <text class="chip-text" x="840" y="123" text-anchor="middle">return_records</text>
+    <text class="note" x="965" y="123">เก็บการคืนของจริง แยกจากการรับของเข้าห้องคุ้มครอง</text>
+  </g>
+</svg>

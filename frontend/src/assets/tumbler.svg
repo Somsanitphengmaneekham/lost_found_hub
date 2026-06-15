@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" role="img" aria-labelledby="title desc">
+  <title id="title">Black insulated tumbler</title>
+  <desc id="desc">A matte black tumbler on a pale campus table.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f2f6f6"/>
+      <stop offset="1" stop-color="#d7e5e4"/>
+    </linearGradient>
+    <linearGradient id="cup" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#3d4b48"/>
+      <stop offset=".45" stop-color="#17221f"/>
+      <stop offset="1" stop-color="#050807"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="240" fill="url(#bg)"/>
+  <ellipse cx="159" cy="184" rx="56" ry="16" fill="#8296a4" opacity=".2"/>
+  <path d="M110 65h100l-15 119c-2 16-16 28-32 28h-6c-16 0-30-12-32-28L110 65Z" fill="url(#cup)" stroke="#43534f" stroke-width="4"/>
+  <path d="M106 58c0-9 7-16 16-16h76c9 0 16 7 16 16v7H106v-7Z" fill="#273532" stroke="#43534f" stroke-width="4"/>
+  <path d="M132 83h56" stroke="#71817c" stroke-width="4" stroke-linecap="round" opacity=".58"/>
+  <path d="M127 126h65" stroke="#0b7d74" stroke-width="9" stroke-linecap="round"/>
+</svg>

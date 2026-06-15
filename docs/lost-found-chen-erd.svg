@@ -1,0 +1,243 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1760" height="1120" viewBox="0 0 1760 1120">
+  <defs>
+    <style>
+      .bg { fill: #ffffff; }
+      .entity { fill: #f9fbfc; stroke: #1f2d3d; stroke-width: 1.6; rx: 4; }
+      .attr { fill: #ffffff; stroke: #1f2d3d; stroke-width: 1.1; }
+      .relation { fill: #ffffff; stroke: #1f2d3d; stroke-width: 1.2; }
+      .line { stroke: #1f2d3d; stroke-width: 1.2; fill: none; }
+      .title { font: 700 30px Tahoma, Arial, sans-serif; fill: #10213f; }
+      .subtitle { font: 17px Tahoma, Arial, sans-serif; fill: #405269; }
+      .card { font: 18px Tahoma, Arial, sans-serif; fill: #111827; }
+      .label { font: 14px Tahoma, Arial, sans-serif; fill: #111827; }
+      .small { font: 13px Tahoma, Arial, sans-serif; fill: #111827; }
+      .pk { text-decoration: underline; font-weight: 700; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1760" height="1120"/>
+  <text class="title" x="48" y="50">Lost &amp; Found Hub - Chen ERD (Minimal Database)</text>
+  <text class="subtitle" x="48" y="82">แสดงเฉพาะตารางที่จำเป็น: member, master data, lost/found posts, images, handover, matching, claim และ return records</text>
+
+  <!-- Relationship lines -->
+  <path class="line" d="M250 170 L335 240"/>
+  <path class="line" d="M420 360 L620 270"/>
+  <path class="line" d="M420 360 L620 520"/>
+  <path class="line" d="M250 520 L620 290"/>
+  <path class="line" d="M250 520 L620 540"/>
+  <path class="line" d="M250 720 L620 310"/>
+  <path class="line" d="M250 720 L620 560"/>
+  <path class="line" d="M795 270 L990 170"/>
+  <path class="line" d="M795 520 L990 170"/>
+  <path class="line" d="M795 270 L990 390"/>
+  <path class="line" d="M795 520 L990 390"/>
+  <path class="line" d="M795 520 L990 610"/>
+  <path class="line" d="M795 520 L1280 360"/>
+  <path class="line" d="M795 520 L1280 590"/>
+  <path class="line" d="M420 360 L1280 590"/>
+  <path class="line" d="M250 720 L1280 830"/>
+  <path class="line" d="M1445 590 L1280 830"/>
+  <path class="line" d="M1445 590 L990 610"/>
+  <path class="line" d="M420 360 L250 320"/>
+
+  <!-- Left entities -->
+  <rect class="entity" x="120" y="130" width="160" height="80"/>
+  <text class="card" x="200" y="178" text-anchor="middle">Departments</text>
+
+  <rect class="entity" x="300" y="300" width="160" height="120"/>
+  <text class="card" x="380" y="365" text-anchor="middle">Members</text>
+
+  <rect class="entity" x="90" y="280" width="190" height="80"/>
+  <text class="card" x="185" y="315" text-anchor="middle">Student_card</text>
+  <text class="card" x="185" y="340" text-anchor="middle">uploads</text>
+
+  <rect class="entity" x="95" y="480" width="185" height="80"/>
+  <text class="card" x="187" y="528" text-anchor="middle">Item_categories</text>
+
+  <rect class="entity" x="120" y="680" width="160" height="80"/>
+  <text class="card" x="200" y="728" text-anchor="middle">Locations</text>
+
+  <!-- Middle entities -->
+  <rect class="entity" x="620" y="220" width="175" height="100"/>
+  <text class="card" x="708" y="278" text-anchor="middle">Lost_posts</text>
+
+  <rect class="entity" x="620" y="470" width="175" height="100"/>
+  <text class="card" x="708" y="528" text-anchor="middle">Found_posts</text>
+
+  <rect class="entity" x="990" y="130" width="170" height="80"/>
+  <text class="card" x="1075" y="178" text-anchor="middle">Item_images</text>
+
+  <rect class="entity" x="990" y="350" width="170" height="80"/>
+  <text class="card" x="1075" y="398" text-anchor="middle">Matches</text>
+
+  <rect class="entity" x="990" y="570" width="190" height="90"/>
+  <text class="card" x="1085" y="605" text-anchor="middle">Handover</text>
+  <text class="card" x="1085" y="630" text-anchor="middle">records</text>
+
+  <!-- Right entities -->
+  <rect class="entity" x="1280" y="320" width="190" height="90"/>
+  <text class="card" x="1375" y="355" text-anchor="middle">Claim</text>
+  <text class="card" x="1375" y="380" text-anchor="middle">requests</text>
+
+  <rect class="entity" x="1280" y="790" width="190" height="90"/>
+  <text class="card" x="1375" y="825" text-anchor="middle">Return</text>
+  <text class="card" x="1375" y="850" text-anchor="middle">records</text>
+
+  <!-- Relationship diamonds -->
+  <polygon class="relation" points="300,230 335,260 300,290 265,260"/>
+  <text class="small" x="300" y="266" text-anchor="middle">has</text>
+  <text class="small" x="255" y="185">1</text>
+  <text class="small" x="335" y="296">M</text>
+
+  <polygon class="relation" points="510,250 550,280 510,310 470,280"/>
+  <text class="small" x="510" y="286" text-anchor="middle">creates</text>
+
+  <polygon class="relation" points="510,500 550,530 510,560 470,530"/>
+  <text class="small" x="510" y="536" text-anchor="middle">finds</text>
+
+  <polygon class="relation" points="455,455 505,490 455,525 405,490"/>
+  <text class="small" x="455" y="496" text-anchor="middle">classifies</text>
+
+  <polygon class="relation" points="455,680 505,715 455,750 405,715"/>
+  <text class="small" x="455" y="721" text-anchor="middle">place</text>
+
+  <polygon class="relation" points="890,135 930,165 890,195 850,165"/>
+  <text class="small" x="890" y="171" text-anchor="middle">has</text>
+
+  <polygon class="relation" points="890,360 940,390 890,420 840,390"/>
+  <text class="small" x="890" y="396" text-anchor="middle">scores</text>
+
+  <polygon class="relation" points="890,585 940,615 890,645 840,615"/>
+  <text class="small" x="890" y="621" text-anchor="middle">handover</text>
+
+  <polygon class="relation" points="1185,330 1235,365 1185,400 1135,365"/>
+  <text class="small" x="1185" y="371" text-anchor="middle">claim</text>
+
+  <polygon class="relation" points="1185,800 1235,835 1185,870 1135,835"/>
+  <text class="small" x="1185" y="841" text-anchor="middle">return</text>
+
+  <!-- Attributes -->
+  <ellipse class="attr" cx="90" cy="105" rx="70" ry="22"/>
+  <text class="label pk" x="90" y="111" text-anchor="middle">department_id</text>
+  <line class="line" x1="135" y1="120" x2="150" y2="135"/>
+  <ellipse class="attr" cx="200" cy="95" rx="45" ry="22"/>
+  <text class="label" x="200" y="101" text-anchor="middle">code</text>
+  <line class="line" x1="200" y1="117" x2="200" y2="130"/>
+  <ellipse class="attr" cx="315" cy="112" rx="58" ry="22"/>
+  <text class="label" x="315" y="118" text-anchor="middle">name_th</text>
+  <line class="line" x1="278" y1="128" x2="260" y2="140"/>
+
+  <ellipse class="attr" cx="310" cy="245" rx="55" ry="22"/>
+  <text class="label pk" x="310" y="251" text-anchor="middle">member_id</text>
+  <line class="line" x1="325" y1="266" x2="340" y2="302"/>
+  <ellipse class="attr" cx="430" cy="245" rx="58" ry="22"/>
+  <text class="label" x="430" y="251" text-anchor="middle">username</text>
+  <line class="line" x1="412" y1="266" x2="400" y2="302"/>
+  <ellipse class="attr" cx="520" cy="345" rx="48" ry="22"/>
+  <text class="label" x="520" y="351" text-anchor="middle">role</text>
+  <line class="line" x1="472" y1="350" x2="460" y2="352"/>
+  <ellipse class="attr" cx="480" cy="445" rx="68" ry="22"/>
+  <text class="label" x="480" y="451" text-anchor="middle">identity_status</text>
+  <line class="line" x1="438" y1="428" x2="420" y2="420"/>
+
+  <ellipse class="attr" cx="75" cy="255" rx="56" ry="22"/>
+  <text class="label pk" x="75" y="261" text-anchor="middle">upload_id</text>
+  <line class="line" x1="124" y1="268" x2="135" y2="282"/>
+  <ellipse class="attr" cx="185" cy="240" rx="62" ry="22"/>
+  <text class="label" x="185" y="246" text-anchor="middle">image_url</text>
+  <line class="line" x1="185" y1="262" x2="185" y2="280"/>
+  <ellipse class="attr" cx="290" cy="255" rx="72" ry="22"/>
+  <text class="label" x="290" y="261" text-anchor="middle">claim_request_id</text>
+  <line class="line" x1="260" y1="273" x2="240" y2="282"/>
+
+  <ellipse class="attr" cx="70" cy="455" rx="65" ry="22"/>
+  <text class="label pk" x="70" y="461" text-anchor="middle">category_id</text>
+  <line class="line" x1="118" y1="470" x2="135" y2="482"/>
+  <ellipse class="attr" cx="188" cy="435" rx="58" ry="22"/>
+  <text class="label" x="188" y="441" text-anchor="middle">name_th</text>
+  <line class="line" x1="188" y1="457" x2="188" y2="480"/>
+
+  <ellipse class="attr" cx="78" cy="655" rx="62" ry="22"/>
+  <text class="label pk" x="78" y="661" text-anchor="middle">location_id</text>
+  <line class="line" x1="125" y1="670" x2="145" y2="682"/>
+  <ellipse class="attr" cx="200" cy="635" rx="58" ry="22"/>
+  <text class="label" x="200" y="641" text-anchor="middle">name_th</text>
+  <line class="line" x1="200" y1="657" x2="200" y2="680"/>
+  <ellipse class="attr" cx="315" cy="660" rx="72" ry="22"/>
+  <text class="label" x="315" y="666" text-anchor="middle">location_type</text>
+  <line class="line" x1="270" y1="675" x2="255" y2="682"/>
+
+  <ellipse class="attr" cx="585" cy="175" rx="62" ry="22"/>
+  <text class="label pk" x="585" y="181" text-anchor="middle">lost_post_id</text>
+  <line class="line" x1="615" y1="195" x2="640" y2="222"/>
+  <ellipse class="attr" cx="708" cy="162" rx="42" ry="22"/>
+  <text class="label" x="708" y="168" text-anchor="middle">title</text>
+  <line class="line" x1="708" y1="184" x2="708" y2="220"/>
+  <ellipse class="attr" cx="830" cy="195" rx="78" ry="22"/>
+  <text class="label" x="830" y="201" text-anchor="middle">color_brand_mark</text>
+  <line class="line" x1="795" y1="213" x2="770" y2="225"/>
+
+  <ellipse class="attr" cx="585" cy="610" rx="68" ry="22"/>
+  <text class="label pk" x="585" y="616" text-anchor="middle">found_post_id</text>
+  <line class="line" x1="620" y1="592" x2="645" y2="570"/>
+  <ellipse class="attr" cx="708" cy="640" rx="42" ry="22"/>
+  <text class="label" x="708" y="646" text-anchor="middle">title</text>
+  <line class="line" x1="708" y1="618" x2="708" y2="570"/>
+  <ellipse class="attr" cx="840" cy="612" rx="78" ry="22"/>
+  <text class="label" x="840" y="618" text-anchor="middle">found_status</text>
+  <line class="line" x1="800" y1="592" x2="776" y2="570"/>
+
+  <ellipse class="attr" cx="1000" cy="90" rx="52" ry="22"/>
+  <text class="label pk" x="1000" y="96" text-anchor="middle">image_id</text>
+  <line class="line" x1="1025" y1="110" x2="1045" y2="130"/>
+  <ellipse class="attr" cx="1135" cy="95" rx="62" ry="22"/>
+  <text class="label" x="1135" y="101" text-anchor="middle">image_url</text>
+  <line class="line" x1="1125" y1="118" x2="1115" y2="132"/>
+
+  <ellipse class="attr" cx="1000" cy="310" rx="58" ry="22"/>
+  <text class="label pk" x="1000" y="316" text-anchor="middle">match_id</text>
+  <line class="line" x1="1022" y1="331" x2="1040" y2="352"/>
+  <ellipse class="attr" cx="1155" cy="310" rx="70" ry="22"/>
+  <text class="label" x="1155" y="316" text-anchor="middle">match_score</text>
+  <line class="line" x1="1130" y1="332" x2="1110" y2="352"/>
+
+  <ellipse class="attr" cx="1000" cy="530" rx="70" ry="22"/>
+  <text class="label pk" x="1000" y="536" text-anchor="middle">handover_id</text>
+  <line class="line" x1="1025" y1="552" x2="1040" y2="572"/>
+  <ellipse class="attr" cx="1165" cy="535" rx="78" ry="22"/>
+  <text class="label" x="1165" y="541" text-anchor="middle">handed_over_at</text>
+  <line class="line" x1="1135" y1="556" x2="1115" y2="572"/>
+
+  <ellipse class="attr" cx="1260" cy="275" rx="55" ry="22"/>
+  <text class="label pk" x="1260" y="281" text-anchor="middle">claim_id</text>
+  <line class="line" x1="1288" y1="295" x2="1310" y2="322"/>
+  <ellipse class="attr" cx="1415" cy="275" rx="82" ry="22"/>
+  <text class="label" x="1415" y="281" text-anchor="middle">claim_message</text>
+  <line class="line" x1="1400" y1="298" x2="1390" y2="322"/>
+
+  <ellipse class="attr" cx="1265" cy="750" rx="65" ry="22"/>
+  <text class="label pk" x="1265" y="756" text-anchor="middle">return_id</text>
+  <line class="line" x1="1295" y1="770" x2="1320" y2="792"/>
+  <ellipse class="attr" cx="1415" cy="750" rx="72" ry="22"/>
+  <text class="label" x="1415" y="756" text-anchor="middle">returned_at</text>
+  <line class="line" x1="1405" y1="772" x2="1395" y2="792"/>
+
+  <!-- Data store summary -->
+  <rect class="entity" x="70" y="920" width="500" height="130"/>
+  <text class="card" x="95" y="952">Data Store Mapping</text>
+  <text class="small" x="95" y="982">D1 members: members, student_card_uploads</text>
+  <text class="small" x="95" y="1007">D2-D4 master data: item_categories, departments, locations</text>
+  <text class="small" x="95" y="1032">D5 lost posts: lost_posts, item_images, matches</text>
+
+  <rect class="entity" x="620" y="920" width="560" height="130"/>
+  <text class="card" x="645" y="952">Found Item Workflow Tables</text>
+  <text class="small" x="645" y="982">found_posts keeps approval status: approved_by, approved_at, reject_reason</text>
+  <text class="small" x="645" y="1007">handover_records = finder sends item to protection room</text>
+  <text class="small" x="645" y="1032">return_records = teacher/staff returns item to owner</text>
+
+  <rect class="entity" x="1230" y="920" width="430" height="130"/>
+  <text class="card" x="1255" y="952">Removed For Simplicity</text>
+  <text class="small" x="1255" y="982">No approval_logs, notifications, or audit_logs</text>
+  <text class="small" x="1255" y="1007">Use UI toast for notifications in the first version</text>
+  <text class="small" x="1255" y="1032">Use return_records.returned_at instead of claim_requests.returned_at</text>
+</svg>
