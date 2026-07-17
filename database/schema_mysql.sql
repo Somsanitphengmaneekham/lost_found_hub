@@ -45,6 +45,7 @@ DROP TABLE IF EXISTS handover_records;
 DROP TABLE IF EXISTS item_images;
 DROP TABLE IF EXISTS found_posts;
 DROP TABLE IF EXISTS lost_posts;
+DROP TABLE IF EXISTS password_reset_otps;
 DROP TABLE IF EXISTS student_card_uploads;
 DROP TABLE IF EXISTS members;
 DROP TABLE IF EXISTS locations;
@@ -89,7 +90,7 @@ CREATE TABLE locations (
   building      VARCHAR(120)     NULL,
   floor         VARCHAR(40)      NULL,
   detail        TEXT             NULL,
-  location_type ENUM('found','lost','both','handover') NOT NULL DEFAULT 'both',
+
   is_active     TINYINT(1)   NOT NULL DEFAULT 1,
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -98,7 +99,7 @@ CREATE TABLE locations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ── members ───────────────────────────────────────────────────
--- ⚠️  card_image_url / avatar_url: ຕ້ອງເປັນ HTTPS URL ເທົ່ານັ້ນ
+-- ⚠️  card_image_url / avatar_url: ເກັບ URL/path ຂອງໄຟລ໌ທີ່ອັບໂຫຼດ ຫຼື URL ຮູບພາບ
 --     (Base64 ຖືກປະຕິເສດໂດຍ API ຫຼັງຈາກ Fix 3)
 CREATE TABLE members (
   id              INT UNSIGNED  NOT NULL AUTO_INCREMENT,
@@ -112,9 +113,9 @@ CREATE TABLE members (
   email           VARCHAR(180)  NOT NULL,
   phone           VARCHAR(40)       NULL,
   department_id   INT UNSIGNED      NULL,
-  identity_status ENUM('pending','verified','rejected') NOT NULL DEFAULT 'pending',
-  card_image_url  VARCHAR(2048)     NULL COMMENT 'HTTPS URL ຮູບບັດນັກສຶກສາ (ບໍ່ແມ່ນ Base64)',
-  avatar_url      VARCHAR(2048)     NULL COMMENT 'HTTPS URL ຮູບໂປຣໄຟລ໌ (ບໍ່ແມ່ນ Base64)',
+  identity_status ENUM('pending','verified','rejected') NOT NULL DEFAULT 'verified',
+  card_image_url  VARCHAR(2048)     NULL COMMENT 'URL/path ຮູບບັດນັກສຶກສາທີ່ອັບໂຫຼດ (ບໍ່ແມ່ນ Base64)',
+  avatar_url      VARCHAR(2048)     NULL COMMENT 'URL/path ຮູບໂປຣໄຟລ໌ທີ່ອັບໂຫຼດ (ບໍ່ແມ່ນ Base64)',
   is_active       TINYINT(1)    NOT NULL DEFAULT 1,
   last_login_at   DATETIME          NULL,
   created_at      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -132,13 +133,37 @@ CREATE TABLE members (
     ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ── password_reset_otps ──────────────────────────────────────
+CREATE TABLE password_reset_otps (
+  id                     INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  member_id              INT UNSIGNED NOT NULL,
+  channel                ENUM('email') NOT NULL,
+  destination            VARCHAR(190) NOT NULL,
+  otp_hash               VARCHAR(255) NOT NULL,
+  expires_at             DATETIME NOT NULL,
+  attempt_count          TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  verified_at            DATETIME NULL,
+  reset_token_digest     VARCHAR(64) NULL,
+  reset_token_expires_at DATETIME NULL,
+  consumed_at            DATETIME NULL,
+  created_at             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_password_reset_member_id (member_id),
+  KEY idx_password_reset_destination (destination),
+  KEY idx_password_reset_expires_at (expires_at),
+  KEY idx_password_reset_token_digest (reset_token_digest),
+  CONSTRAINT fk_password_reset_member
+    FOREIGN KEY (member_id) REFERENCES members(id)
+    ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ── student_card_uploads ──────────────────────────────────────
 CREATE TABLE student_card_uploads (
   id               INT UNSIGNED NOT NULL AUTO_INCREMENT,
   member_id        INT UNSIGNED NOT NULL,
   claim_request_id INT UNSIGNED     NULL,
-  image_url        VARCHAR(2048) NOT NULL COMMENT 'HTTPS URL ຮູບບັດ',
-  status           ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+  image_url        VARCHAR(2048) NOT NULL COMMENT 'URL/path ຮູບບັດທີ່ອັບໂຫຼດ',
+  status           ENUM('pending','approved','rejected') NOT NULL DEFAULT 'approved',
   reviewed_by      INT UNSIGNED     NULL,
   reviewed_at      DATETIME         NULL,
   reject_reason    TEXT             NULL,
@@ -334,7 +359,6 @@ CREATE TABLE matches (
   lost_post_id  INT UNSIGNED    NOT NULL,
   found_post_id INT UNSIGNED    NOT NULL,
   match_score   DECIMAL(5,2)   NOT NULL COMMENT 'ຄະແນນການຈັບຄູ່ 0-100',
-  status        ENUM('suggested','confirmed','rejected') NOT NULL DEFAULT 'suggested',
   created_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_matches_lost_post_id (lost_post_id),
@@ -406,12 +430,12 @@ INSERT INTO item_categories (name_th, description) VALUES
   ('ອື່ນໆ',           'ລາຍການທີ່ບໍ່ຢູ່ໃນໝວດໝູ່ທີ່ກຳນົດ')
 ON DUPLICATE KEY UPDATE description = VALUES(description);
 
-INSERT INTO locations (name_th, building, floor, detail, location_type) VALUES
-  ('ຫ້ອງຄຸ້ມຄອງ',              'ຄະນະວິທະຍາສາດທຳມະຊາດ', '1',  'ຈຸດຮັບຝາກ ແລະ ສົ່ງມອບສິ່ງຂອງ',                 'handover'),
-  ('ຕຶກພາກວິຊາວິທະຍາສາດ',     'ຄະນະວິທະຍາສາດທຳມະຊາດ', NULL, 'ພື້ນທີ່ຫ້ອງຮຽນ ຫ້ອງປະຕິບັດການ ແລະ ທາງເດີນ', 'both'),
-  ('ຕຶກພາກວິຊາຄະນິດສາດ',      'ຄະນະວິທະຍາສາດທຳມະຊາດ', NULL, 'ພື້ນທີ່ຫ້ອງຮຽນ ແລະ ທາງເດີນຂອງພາກວິຊາ',        'both'),
-  ('ຕຶກພາກວິຊາຟີຊິກ ແລະ ເຄມີ','ຄະນະວິທະຍາສາດທຳມະຊາດ', NULL, 'ພື້ນທີ່ຫ້ອງຮຽນ ຫ້ອງທົດລອງ ແລະ ທາງເດີນ',      'both'),
-  ('ລານກາງຄະນະ',               'ຄະນະວິທະຍາສາດທຳມະຊາດ', NULL, 'ພື້ນທີ່ກາງແຈ້ງ ແລະ ຈຸດນັ່ງພັກ',                'both');
+INSERT INTO locations (name_th, building, floor, detail) VALUES
+  ('ຫ້ອງຄຸ້ມຄອງ',              'ຄະນະວິທະຍາສາດທຳມະຊາດ', '1',  'ຈຸດຮັບຝາກ ແລະ ສົ່ງມອບສິ່ງຂອງ'),
+  ('ຕຶກພາກວິຊາວິທະຍາສາດ',     'ຄະນະວິທະຍາສາດທຳມະຊາດ', NULL, 'ພື້ນທີ່ຫ້ອງຮຽນ ຫ້ອງປະຕິບັດການ ແລະ ທາງເດີນ'),
+  ('ຕຶກພາກວິຊາຄະນິດສາດ',      'ຄະນະວິທະຍາສາດທຳມະຊາດ', NULL, 'ພື້ນທີ່ຫ້ອງຮຽນ ແລະ ທາງເດີນຂອງພາກວິຊາ'),
+  ('ຕຶກພາກວິຊາຟີຊິກ ແລະ ເຄມີ','ຄະນະວິທະຍາສາດທຳມະຊາດ', NULL, 'ພື້ນທີ່ຫ້ອງຮຽນ ຫ້ອງທົດລອງ ແລະ ທາງເດີນ'),
+  ('ລານກາງຄະນະ',               'ຄະນະວິທະຍາສາດທຳມະຊາດ', NULL, 'ພື້ນທີ່ກາງແຈ້ງ ແລະ ຈຸດນັ່ງພັກ');
 
 -- ⚠️  Starter accounts — ໃຫ້ປ່ຽນ password_hash ໃຫ້ຖືກຕ້ອງ ກ່ອນ deploy production
 --     password_hash ນີ້ເປັນ plaintext placeholder ເທົ່ານັ້ນ

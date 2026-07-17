@@ -9,7 +9,6 @@ import {
   LogIn,
   LogOut,
   PackageCheck,
-  SearchCheck,
   Settings,
   ShieldCheck,
   UserCircle,
@@ -23,6 +22,7 @@ function activeHrefFromHash(hash) {
   if (href === "#announcements") return "#home";
   if (href === "#register") return "#login";
   if (href === "#matches") return "#matching";
+  if (href === "#review") return "#approval";
   return href;
 }
 
@@ -39,9 +39,8 @@ export function Header({ currentUser, notificationCount = 0, onLogout }) {
         { label: "ແຈ້ງຂອງສູນຫາຍ", href: "#lost-form", icon: FileQuestion },
         ...(isTeacher
           ? [
-              { label: "ອະນຸມັດ", href: "#approval", icon: ShieldCheck },
+              { label: "ກວດສອບ", href: "#approval", icon: ShieldCheck },
               { label: "ຂໍ້ມູນພື້ນຖານ", href: "#master-data", icon: Database },
-              { label: "ກວດສອບ", href: "#review", icon: SearchCheck },
             ]
           : []),
         { label: "ໂປຣໄຟລ໌", href: "#profile", icon: Settings },

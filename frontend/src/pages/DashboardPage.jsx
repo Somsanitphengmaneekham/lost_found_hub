@@ -13,11 +13,9 @@ import {
   RotateCcw,
   ShieldCheck,
   Trash2,
-  UserCheck,
-  Users,
   X,
 } from "lucide-react";
-import { matchStatusMeta, statusMeta } from "../data.js";
+import { statusMeta } from "../data.js";
 import {
   canDeleteFoundPost,
   canDeleteLostPost,
@@ -39,19 +37,13 @@ function safeFoundStatus(status) {
   return statusMeta[status] ?? { label: status, tone: "slate" };
 }
 
-function safeMatchStatus(status) {
-  return matchStatusMeta[status] ?? { label: status, tone: "slate" };
-}
-
 function userOwnsFound(item, currentUser) {
   return Number(item.finderId) === Number(currentUser.id) || item.finder === currentUser.fullName;
 }
 
 function userOwnsMatch(match, currentUser) {
   const lostOwnerId = match.lost?.ownerId;
-  const foundFinderId = match.found?.finderId;
-
-  return Number(lostOwnerId) === Number(currentUser.id) || Number(foundFinderId) === Number(currentUser.id);
+  return Number(lostOwnerId) === Number(currentUser.id);
 }
 
 function topCounts(items, key, limit = 5) {
@@ -82,14 +74,9 @@ const roleGuideSteps = {
       description: "ເຂົ້າໜ້າອະນຸມັດເພື່ອກວດຂໍ້ມູນຂອງສູນຫາຍ ແລະ ຂອງທີ່ພົບກ່ອນເຜີຍແຜ່.",
     },
     {
-      icon: UserCheck,
-      title: "ຢືນຢັນນັກສຶກສາ",
-      description: "ກວດຮູບບັດນັກສຶກສາ ແລະ ປ່ຽນສະຖານະຢືນຢັນຕົວຕົນ.",
-    },
-    {
       icon: Link2,
-      title: "ກວດ Match",
-      description: "ເບິ່ງລາຍການທີ່ລະບົບແນະນຳວ່າອາດກົງກັນ ແລະ ຢືນຢັນຜົນ.",
+      title: "ເບິ່ງລາຍການແນະນຳ",
+      description: "ເບິ່ງຄະແນນຄວາມຄ້າຍຄືຈາກລະບົບ ໂດຍບໍ່ຕ້ອງອະນຸມັດ ຫຼື ຢືນຢັນ Match.",
     },
     {
       icon: ClipboardCheck,
@@ -116,7 +103,7 @@ const roleGuideSteps = {
     {
       icon: Link2,
       title: "ກວດລາຍການທີ່ອາດກົງກັນ",
-      description: "ຖ້າມີ Match ລະບົບຈະສະແດງໃນ Dashboard ເພື່ອໃຫ້ຕິດຕາມຕໍ່.",
+      description: "ຫຼັງສົ່ງປະກາດ ລະບົບຈະແນະນຳຂອງທີ່ພົບທີ່ຄ້າຍກັນພ້ອມເປີເຊັນ.",
     },
   ],
 };
@@ -126,18 +113,13 @@ export function DashboardPage({
   foundItems,
   lostReports,
   matches,
-  members,
   onApproveFound,
-  onConfirmMatch,
   onDeleteFound,
   onDeleteLost,
   onEditFound,
   onEditLost,
   onMoveToApproval,
   onRejectFound,
-  onRejectMatch,
-  onReturnMatch,
-  onUpdateMemberIdentityStatus,
   returnRecords,
 }) {
   const isTeacher = currentUser.role === "teacher";
@@ -148,14 +130,9 @@ export function DashboardPage({
         foundItems={foundItems}
         lostReports={lostReports}
         matches={matches}
-        members={members}
         onApproveFound={onApproveFound}
-        onConfirmMatch={onConfirmMatch}
         onMoveToApproval={onMoveToApproval}
         onRejectFound={onRejectFound}
-        onRejectMatch={onRejectMatch}
-        onReturnMatch={onReturnMatch}
-        onUpdateMemberIdentityStatus={onUpdateMemberIdentityStatus}
         returnRecords={returnRecords}
       />
     );
@@ -180,24 +157,15 @@ function TeacherDashboard({
   foundItems,
   lostReports,
   matches,
-  members,
   onApproveFound,
-  onConfirmMatch,
   onMoveToApproval,
   onRejectFound,
-  onRejectMatch,
-  onReturnMatch,
-  onUpdateMemberIdentityStatus,
   returnRecords,
 }) {
   const approvalItems = foundItems
     .filter((item) => APPROVAL_STATUSES.has(item.status))
     .sort((a, b) => (a.status === "pending_approval" ? -1 : 1) - (b.status === "pending_approval" ? -1 : 1));
-  const suggestedMatches = matches.filter((match) => match.status === "suggested");
-  const confirmedMatches = matches.filter((match) => match.status === "confirmed" && match.found?.status !== "returned");
-  const pendingIdentityMembers = members.filter(
-    (member) => member.role === "student" && member.identityStatus === "pending",
-  );
+  const recommendationMatches = matches.filter((match) => match.status !== "rejected");
   const activeFoundItems = foundItems.filter((item) => item.status !== "returned" && item.status !== "rejected");
   const categoryInsights = topCounts([...foundItems, ...lostReports], "category");
   const locationInsights = topCounts([...foundItems, ...lostReports], "location");
@@ -211,22 +179,10 @@ function TeacherDashboard({
       tone: "amber",
     },
     {
-      label: "Match ທີ່ລະບົບແນະນຳ",
-      value: suggestedMatches.length,
+      label: "ລາຍການທີ່ຄ້າຍຄືກັນ",
+      value: recommendationMatches.length,
       icon: Link2,
       tone: "blue",
-    },
-    {
-      label: "ລໍຖ້າຄືນຂອງ",
-      value: confirmedMatches.length,
-      icon: ClipboardCheck,
-      tone: "green",
-    },
-    {
-      label: "ຢືນຢັນນັກສຶກສາ",
-      value: pendingIdentityMembers.length,
-      icon: UserCheck,
-      tone: "purple",
     },
     {
       label: "ຍັງຄ້າງໃນລະບົບ",
@@ -279,41 +235,6 @@ function TeacherDashboard({
           )}
         </DashboardPanel>
 
-        <DashboardPanel icon={Users} title="ຢືນຢັນຕົວຕນນັກສຶກສາ">
-          {pendingIdentityMembers.length ? (
-            <div className="dashboard-list compact">
-              {pendingIdentityMembers.slice(0, 4).map((member) => (
-                <article className="dashboard-identity-row" key={member.id}>
-                  <div>
-                    <h3>{member.fullName}</h3>
-                    <p>{member.studentCode || member.username}</p>
-                  </div>
-                  <div className="dashboard-actions">
-                    <button
-                      className="approve-button"
-                      onClick={() => onUpdateMemberIdentityStatus(member, "verified")}
-                      type="button"
-                    >
-                      <Check size={16} />
-                      ຢືນຢັນ
-                    </button>
-                    <button
-                      className="reject-button"
-                      onClick={() => onUpdateMemberIdentityStatus(member, "rejected")}
-                      type="button"
-                    >
-                      <X size={16} />
-                      ປະຕິເສດ
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <EmptyState title="ບໍ່ມີບັດທີ່ລໍຖ້າກວດ" description="ບັນຊີນັກສຶກສາທີ່ອັບໂຫຼດບັດຈະສະແດງບ່ອນນີ້" />
-          )}
-        </DashboardPanel>
-
         <DashboardPanel
           actionHref="#matches"
           actionLabel="ເບິ່ງ Match"
@@ -321,16 +242,10 @@ function TeacherDashboard({
           icon={Link2}
           title="ລາຍການທີ່ອາດກົງກັນ"
         >
-          {matches.length ? (
+          {recommendationMatches.length ? (
             <div className="dashboard-list">
-              {matches.slice(0, 5).map((match) => (
-                <MatchRow
-                  key={match.id}
-                  match={match}
-                  onConfirmMatch={onConfirmMatch}
-                  onRejectMatch={onRejectMatch}
-                  onReturnMatch={onReturnMatch}
-                />
+              {recommendationMatches.slice(0, 5).map((match) => (
+                <MatchRow key={match.id} match={match} />
               ))}
             </div>
           ) : (
@@ -379,7 +294,9 @@ function StudentDashboard({
 }) {
   const myLostReports = lostReports.filter((report) => Number(report.ownerId) === Number(currentUser.id));
   const myFoundItems = foundItems.filter((item) => userOwnsFound(item, currentUser));
-  const myMatches = matches.filter((match) => userOwnsMatch(match, currentUser));
+  const myMatches = matches.filter(
+    (match) => match.status !== "rejected" && userOwnsMatch(match, currentUser),
+  );
   const latestItems = [
     ...myLostReports.map((item) => ({ ...item, kind: "lost" })),
     ...myFoundItems.map((item) => ({ ...item, kind: "found" })),
@@ -478,7 +395,12 @@ function StudentDashboard({
           )}
         </DashboardPanel>
 
-        <DashboardPanel icon={Link2} title="Match ທີ່ອາດເປັນຂອງຂ້ອຍ">
+        <DashboardPanel
+          actionHref="#matching"
+          actionLabel="ເບິ່ງທັງໝົດ"
+          icon={Link2}
+          title="ລາຍການພົບຂອງທີ່ອາດກົງກັນ"
+        >
           {myMatches.length ? (
             <div className="dashboard-list compact">
               {myMatches.slice(0, 4).map((match) => (
@@ -488,9 +410,7 @@ function StudentDashboard({
                     <h3>{match.lost?.title || "ສີ່ງຂອງສູນຫາຍ"} ↔ {match.found?.title || "ສີ່ງຂອງທີ່ພົບ"}</h3>
                     <p>{match.found?.location || match.lost?.location || "ບໍ່ລະບຸສະຖານທີ່"}</p>
                   </div>
-                  <span className={`status-chip ${safeMatchStatus(match.status).tone}`}>
-                    {safeMatchStatus(match.status).label}
-                  </span>
+                  <span className="status-chip blue">ລະບົບແນະນຳ</span>
                 </article>
               ))}
             </div>
@@ -621,9 +541,7 @@ function FoundReviewRow({ item, onApproveFound, onMoveToApproval, onRejectFound 
   );
 }
 
-function MatchRow({ match, onConfirmMatch, onRejectMatch, onReturnMatch }) {
-  const meta = safeMatchStatus(match.status);
-
+function MatchRow({ match }) {
   return (
     <article className="dashboard-match-row">
       <div className="dashboard-score">
@@ -632,31 +550,11 @@ function MatchRow({ match, onConfirmMatch, onRejectMatch, onReturnMatch }) {
       </div>
       <div className="dashboard-match-main">
         <div className="dashboard-row-top">
-          <span className={`status-chip ${meta.tone}`}>{meta.label}</span>
+          <span className="status-chip blue">ລະບົບແນະນຳ</span>
           <small>{formatLaoDateTime(match.createdAt)}</small>
         </div>
         <h3>{match.lost?.title || "ຂອງສູນຫາຍ"} ↔ {match.found?.title || "ຂອງທີ່ພົບ"}</h3>
         <p>{match.found?.location || match.lost?.location || "ບໍ່ລະບຸສະຖານທີ່"}</p>
-      </div>
-      <div className="dashboard-actions">
-        {match.status === "suggested" && (
-          <>
-            <button className="approve-button" onClick={() => onConfirmMatch(match.id)} type="button">
-              <Check size={16} />
-              ຢືນຢັນ
-            </button>
-            <button className="reject-button" onClick={() => onRejectMatch(match.id)} type="button">
-              <X size={16} />
-              ປະຕິເສດ
-            </button>
-          </>
-        )}
-        {match.status === "confirmed" && match.found?.status !== "returned" && (
-          <button className="outline-button" onClick={() => onReturnMatch(match.id)} type="button">
-            <ClipboardCheck size={16} />
-            ຄືນຂອງ
-          </button>
-        )}
       </div>
     </article>
   );

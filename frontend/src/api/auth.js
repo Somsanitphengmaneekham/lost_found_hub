@@ -1,13 +1,13 @@
 import { shouldUseLocalFallback, request } from "./http.js";
 import {
   localCreateTeacherMember,
+  localDeleteMember,
   localDemoLogin,
   localFetchMembers,
   localLogin,
   localRegister,
   localUpdateMember,
   localUpdateMemberActiveStatus,
-  localUpdateMemberIdentityStatus,
   localUpdateProfile,
 } from "./localStore.js";
 
@@ -55,6 +55,27 @@ export async function registerUser(body) {
     if (shouldUseLocalFallback(error)) return localRegister(body);
     throw error;
   }
+}
+
+export function requestPasswordResetOtp(body) {
+  return request("/api/auth/password-reset/request", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function verifyPasswordResetOtp(body) {
+  return request("/api/auth/password-reset/verify", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function confirmPasswordReset(body) {
+  return request("/api/auth/password-reset/confirm", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export async function updateProfile(id, body) {
@@ -105,14 +126,14 @@ export async function updateMemberActiveStatus(id, isActive, actorId) {
   }
 }
 
-export async function updateMemberIdentityStatus(id, identityStatus, actorId) {
+export async function deleteMember(id, actorId) {
   try {
-    return await request(`/api/members/${id}/identity-status`, {
-      method: "PATCH",
-      body: JSON.stringify({ identityStatus, actorId }),
+    return await request(`/api/members/${id}`, {
+      method: "DELETE",
+      body: JSON.stringify({ actorId }),
     });
   } catch (error) {
-    if (shouldUseLocalFallback(error)) return localUpdateMemberIdentityStatus(id, identityStatus, actorId);
+    if (shouldUseLocalFallback(error)) return localDeleteMember(id, actorId);
     throw error;
   }
 }

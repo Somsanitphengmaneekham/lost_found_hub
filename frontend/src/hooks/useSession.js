@@ -4,6 +4,7 @@ import {
   registerUser,
   updateProfile,
 } from "../api/auth.js";
+import { uploadSingleImageFile } from "../api/uploads.js";
 import { fnsDepartmentMasterSeed } from "../campusMasterData.js";
 import { roleLabel } from "../utils/ui.js";
 
@@ -99,7 +100,7 @@ export function useSession({ setMemberList, loadAppData, setToast, setLoginError
       ["ລະຫັດນັກສຶກສາ", form.studentCode.trim()],
       ["ລະຫັດຜ່ານ", form.password],
       ["ຢືນຢັນລະຫັດຜ່ານ", form.confirmPassword],
-      ["ຮູບບັດນັກສຶກສາ", form.cardImageUrl],
+      ["ຮູບບັດນັກສຶກສາ", form.cardImageUrl || form.cardImageFile],
     ];
     const missingFields = requiredValues.filter(([, value]) => !value).map(([label]) => label);
 
@@ -114,6 +115,9 @@ export function useSession({ setMemberList, loadAppData, setToast, setLoginError
     }
 
     try {
+      const cardImageUrl =
+        form.cardImageUrl || (form.cardImageFile ? await uploadSingleImageFile(form.cardImageFile) : "");
+
       const member = await registerUser({
         role: "student",
         username,
@@ -125,13 +129,13 @@ export function useSession({ setMemberList, loadAppData, setToast, setLoginError
         department: form.department,
         studentCode: form.studentCode.trim(),
         cardFileName: form.cardFileName,
-        cardImageUrl: form.cardImageUrl,
+        cardImageUrl,
       });
 
       updateCurrentUser(member);
       setLoginError("");
       await loadAppData();
-      setToast(`ສະໝັກສະມາຊິກແລ້ວ: ${roleLabel(member.role)} ${member.fullName}`);
+      setToast(`ສະໝັກ ແລະ ເຂົ້າສູ່ລະບົບແລ້ວ: ${roleLabel(member.role)} ${member.fullName}`);
     } catch (error) {
       setLoginError(error.message || "ສະໝັກສະມາຊິກບໍ່ສຳເລັດ");
     }
@@ -163,8 +167,10 @@ export function useSession({ setMemberList, loadAppData, setToast, setLoginError
         current.map((member) => (Number(member.id) === Number(updatedUser.id) ? updatedUser : member)),
       );
       setToast("ອັບໂຫຼດຮູບໂປຣໄຟລ໌ແລ້ວ");
+      return updatedUser;
     } catch (error) {
       setToast(error.message || "ອັບໂຫຼດຮູບໂປຣໄຟລ໌ບໍ່ສຳເລັດ");
+      throw error;
     }
   }
 
@@ -175,17 +181,16 @@ export function useSession({ setMemberList, loadAppData, setToast, setLoginError
     }
 
     try {
-      const updatedUser = await updateProfile(currentUser.id, {
-        cardImageUrl,
-        identityStatus: "pending",
-      });
+      const updatedUser = await updateProfile(currentUser.id, { cardImageUrl });
       updateCurrentUser(updatedUser);
       setMemberList((current) =>
         current.map((member) => (Number(member.id) === Number(updatedUser.id) ? updatedUser : member)),
       );
-      setToast("ອັບໂຫຼດຮູບບັດແລ້ວ ລໍຖ້າອາຈານຢືນຢັນຕົວຕົນ");
+      setToast("ອັບໂຫຼດຮູບບັດນັກສຶກສາແລ້ວ");
+      return updatedUser;
     } catch (error) {
       setToast(error.message || "ອັບໂຫຼດຮູບບັດບໍ່ສຳເລັດ");
+      throw error;
     }
   }
 

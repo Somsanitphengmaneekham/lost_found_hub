@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#14323b" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="900" fill="#f5fafb"/>
+  <rect x="20" y="20" width="1160" height="860" rx="0" fill="#ffffff" stroke="#183946" stroke-width="2"/>
+<rect x="40" y="30" width="1120" height="80" rx="0" fill="#24564f" stroke="#24564f" stroke-width="2"/>
+<text x="68" y="72" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="25" font-weight="900" fill="#ffffff">Lost and Found</text>
+<text x="68" y="98" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#d5e4e6">02. Login &amp; Student Register / ເຂົ້າລະບົບ ແລະ ສະໝັກ · #login / #register</text>
+<text x="430" y="82" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#d5e4e6">Home</text>
+
+<rect x="986" y="44" width="78" height="34" rx="4" fill="#3d6965" stroke="#a7c5c8" stroke-width="2"/>
+<text x="1025" y="67" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="#ffffff">Login</text>
+<rect x="1075" y="44" width="92" height="34" rx="4" fill="#d7f5e9" stroke="#d7f5e9" stroke-width="2"/>
+<text x="1121" y="67" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="#14323b">Register</text>
+  <g filter="url(#shadow)">
+    <rect x="80" y="135" width="460" height="160" rx="4" fill="#ffffff" stroke="#183946" stroke-width="2"/>
+<text x="98" y="169" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">Brand block</text>
+<text x="102" y="201" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Lost and Found logo</text>
+<text x="102" y="225" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Welcome text</text>
+<text x="102" y="249" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Purpose of website</text>
+<rect x="590" y="135" width="530" height="270" rx="4" fill="#e9f2ff" stroke="#183946" stroke-width="2"/>
+<text x="608" y="169" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">Login form</text>
+<text x="612" y="201" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Username</text>
+<text x="612" y="225" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Password</text>
+<text x="612" y="249" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Login button</text>
+<text x="612" y="273" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Error message area</text>
+<rect x="80" y="435" width="1040" height="335" rx="4" fill="#e7f7ef" stroke="#183946" stroke-width="2"/>
+<text x="98" y="469" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">Student register form</text>
+<text x="102" y="501" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Only students can register</text>
+<text x="102" y="525" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Name, surname, email, phone</text>
+<text x="102" y="549" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Department, student code</text>
+<text x="102" y="573" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Password + confirm password</text>
+<text x="102" y="597" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Upload student card image preview</text>
+<rect x="80" y="795" width="1040" height="45" rx="4" fill="#fff4d8" stroke="#183946" stroke-width="2"/>
+<text x="98" y="829" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">Note</text>
+<text x="102" y="861" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Teacher accounts are created by protection office/admin, not by</text>
+  </g>
+</svg>

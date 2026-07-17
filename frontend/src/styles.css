@@ -170,7 +170,8 @@ img {
 }
 
 .login-form .button,
-.register-form .button {
+.register-form .button,
+.forgot-form .button {
   width: 100%;
   margin-top: 4px;
 }
@@ -200,6 +201,102 @@ img {
   border-radius: 7px;
   font-size: 13px;
   font-weight: 800;
+}
+
+.forgot-link {
+  justify-self: end;
+  padding: 0;
+  color: var(--teal-dark);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-weight: 900;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.forgot-link.align-left {
+  justify-self: start;
+  margin-top: 2px;
+}
+
+.forgot-panel,
+.forgot-form {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.forgot-heading {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.forgot-heading h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.forgot-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.forgot-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  color: var(--teal-dark);
+  background: var(--teal-soft);
+  border-radius: 8px;
+}
+
+.forgot-status,
+.forgot-dev-otp {
+  padding: 10px 12px;
+  color: var(--teal-dark);
+  background: var(--teal-soft);
+  border: 1px solid rgba(8, 127, 117, 0.22);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.forgot-status.success {
+  color: #126313;
+  background: #e8f7e9;
+  border-color: #bce3bf;
+}
+
+.forgot-dev-otp {
+  color: #8a3b00;
+  background: var(--amber-soft);
+  border-color: #f0d28b;
+}
+
+.forgot-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .forgot-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 .site-header {
@@ -2241,7 +2338,7 @@ main {
 
 .teacher-approval-card.wide {
   grid-column: 1 / -1;
-  grid-template-columns: 150px minmax(0, 1fr) 160px;
+  grid-template-columns: 150px minmax(0, 1fr) minmax(220px, 260px);
 }
 
 .teacher-approval-image {
@@ -2347,8 +2444,176 @@ main {
 
 .teacher-approval-card.wide .teacher-approval-actions .approve-button,
 .teacher-approval-card.wide .teacher-approval-actions .reject-button,
-.teacher-approval-card.wide .teacher-approval-actions .approval-result {
+.teacher-approval-card.wide .teacher-approval-actions .approval-result,
+.teacher-approval-card.wide .teacher-approval-actions .return-status-controls {
   width: 100%;
+}
+
+.return-status-controls {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.student-search-combobox {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  width: 100%;
+}
+
+.student-search-label {
+  color: #526767;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.student-search-input {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 8px 0 10px;
+  color: #173f3d;
+  background: #ffffff;
+  border: 1px solid #b8cdcf;
+  border-radius: 6px;
+}
+
+.student-search-input:focus-within {
+  border-color: #087f74;
+  box-shadow: 0 0 0 3px rgba(8, 127, 116, 0.12);
+}
+
+.student-search-input > svg {
+  flex: 0 0 auto;
+  color: #708383;
+}
+
+.student-search-input input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  color: #173f3d;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-size: 13px;
+}
+
+.student-search-input input::placeholder {
+  color: #7a8c8d;
+}
+
+.student-search-clear {
+  display: inline-flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: #607575;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.student-search-clear:hover {
+  color: #173f3d;
+  background: #eaf3f2;
+}
+
+.student-search-results {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 5px);
+  right: 0;
+  left: 0;
+  max-height: 260px;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #b8cdcf;
+  border-radius: 6px;
+  box-shadow: 0 14px 28px rgba(16, 48, 47, 0.18);
+  list-style: none;
+}
+
+.student-search-results button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 9px;
+  text-align: left;
+  color: #173f3d;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.student-search-results button:hover,
+.student-search-results button:focus-visible,
+.student-search-results button[aria-selected="true"] {
+  background: #e6f4f1;
+  outline: 0;
+}
+
+.student-search-results strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.student-search-results button span {
+  overflow-wrap: anywhere;
+  color: #687b7c;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.student-search-empty,
+.student-search-hint {
+  padding: 9px;
+  color: #687b7c;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.teacher-approval-card:focus-within {
+  position: relative;
+  z-index: 5;
+}
+
+.return-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 12px;
+  color: #ffffff;
+  background: #087f74;
+  border: 1px solid #087f74;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.return-button:hover:not(:disabled) {
+  background: #06685f;
+}
+
+.return-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .approval-result {
@@ -2372,6 +2637,12 @@ main {
   color: var(--red);
   background: var(--red-soft);
   border: 1px solid #f0b8b8;
+}
+
+.approval-result.returned {
+  color: #075f58;
+  background: #e4f5f2;
+  border: 1px solid #9dd8cf;
 }
 
 .teacher-approval-side {
@@ -3105,6 +3376,31 @@ main {
   padding: 18px;
 }
 
+.match-information {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 18px 18px 0;
+  padding: 12px 14px;
+  color: #38515a;
+  background: #f3f8f7;
+  border: 1px solid #cfe0de;
+  border-radius: 7px;
+}
+
+.match-information svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--teal);
+}
+
+.match-information p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
 .match-card {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr);
@@ -3222,6 +3518,12 @@ main {
 
 .reason-list b {
   color: var(--teal-dark);
+}
+
+.match-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
 }
 
 .match-actions {
@@ -3446,7 +3748,7 @@ main {
 }
 
 .review-overview {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   padding-bottom: 0;
 }
 
@@ -3478,6 +3780,10 @@ main {
 .review-layout,
 .review-side-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.review-side-grid.single-card {
+  grid-template-columns: 1fr;
 }
 
 .review-column,
@@ -3694,7 +4000,7 @@ main {
 
 .notifications-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
   padding: 24px;
@@ -3728,32 +4034,6 @@ main {
   color: rgba(255, 255, 255, 0.82);
   font-weight: 750;
   line-height: 1.65;
-}
-
-.notifications-private-card {
-  display: grid;
-  align-content: center;
-  gap: 8px;
-  padding: 18px;
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 8px;
-}
-
-.notifications-private-card svg {
-  color: #9ef1df;
-}
-
-.notifications-private-card strong {
-  font-size: 18px;
-}
-
-.notifications-private-card span {
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 13px;
-  font-weight: 750;
-  line-height: 1.55;
 }
 
 .notifications-metrics {
@@ -6030,7 +6310,7 @@ body {
 }
 
 .teacher-approval-card.wide {
-  grid-template-columns: 130px minmax(0, 1fr) 180px;
+  grid-template-columns: 130px minmax(0, 1fr) minmax(220px, 250px);
 }
 
 .teacher-approval-image {

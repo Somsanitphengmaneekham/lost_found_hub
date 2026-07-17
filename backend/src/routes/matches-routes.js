@@ -31,7 +31,6 @@ export function registerMatchesRoutes(app, pool) {
           m.lost_post_id AS lostPostId,
           m.found_post_id AS foundPostId,
           m.match_score AS matchScore,
-          m.status,
           m.created_at AS createdAt,
           lp.title AS lostTitle,
           lp.description AS lostDescription,
@@ -100,7 +99,7 @@ export function registerMatchesRoutes(app, pool) {
             lostPostId: row.lostPostId,
             foundPostId: row.foundPostId,
             matchScore: Number(row.matchScore),
-            status: row.status,
+            status: "suggested",
             createdAt: row.createdAt,
             reasons: scoreResult.reasons,
             lost: {
@@ -127,46 +126,6 @@ export function registerMatchesRoutes(app, pool) {
     }
   });
 
-  app.patch("/api/matches/:id", async (req, res, next) => {
-    const connection = await pool.getConnection();
-
-    try {
-      const id = parsePositiveId(req.params.id);
-      const status = req.body.status;
-
-      if (!["suggested", "confirmed", "rejected"].includes(status)) {
-        return res.status(400).json({ error: "ສະຖານະ match ບໍ່ຖືກຕ້ອງ" });
-      }
-
-      const [matchRows] = await connection.execute(
-        `SELECT lost_post_id, found_post_id FROM matches WHERE id = ? LIMIT 1`,
-        [id],
-      );
-      if (!matchRows.length) return res.status(404).json({ error: "ບໍ່ພົບ match" });
-
-      const match = matchRows[0];
-      await connection.beginTransaction();
-      await connection.execute(`UPDATE matches SET status = ? WHERE id = ?`, [status, id]);
-
-      if (status === "confirmed") {
-        await connection.execute(`UPDATE found_posts SET status = 'matched' WHERE id = ?`, [
-          match.found_post_id,
-        ]);
-        await connection.execute(`UPDATE lost_posts SET status = 'matched' WHERE id = ?`, [
-          match.lost_post_id,
-        ]);
-      }
-
-      await connection.commit();
-      res.json({ id, status });
-    } catch (error) {
-      await connection.rollback();
-      next(error);
-    } finally {
-      connection.release();
-    }
-  });
-
   app.post("/api/matches/:id/return", async (req, res, next) => {
     const connection = await pool.getConnection();
 
@@ -183,7 +142,6 @@ export function registerMatchesRoutes(app, pool) {
           SELECT
             m.lost_post_id,
             m.found_post_id,
-            m.status AS match_status,
             lp.owner_id AS owner_id,
             lp.status AS lost_status,
             fp.status AS found_status
@@ -198,9 +156,6 @@ export function registerMatchesRoutes(app, pool) {
       if (!matchRows.length) throw createHttpError("ບໍ່ພົບ match", 404);
 
       const match = matchRows[0];
-      if (match.match_status !== "confirmed") {
-        throw createHttpError("return can only be recorded after the match is confirmed", 409);
-      }
       if (match.found_status === "returned" || ["closed", "resolved", "deleted"].includes(match.lost_status)) {
         throw createHttpError("this item has already been returned", 409);
       }

@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Save } from "lucide-react";
+import { uploadSingleImageFile } from "../api/uploads.js";
 import { FormGrid, TextInput } from "../components/common/FormControls.jsx";
-import { IMAGE_ACCEPT, compressImageFile, isAllowedImageFile, isAllowedImageUrl } from "../utils/images.js";
-import { identityStatusLabel, initials, roleLabel } from "../utils/ui.js";
+import { IMAGE_ACCEPT, isAllowedImageFile, isAllowedImageUrl } from "../utils/images.js";
+import { initials, roleLabel } from "../utils/ui.js";
 
 function isPreviewableImage(value) {
   return isAllowedImageUrl(value);
@@ -11,6 +12,8 @@ function isPreviewableImage(value) {
 export function ProfilePage({ currentUser, departmentOptions, onSave, onUploadAvatar, onUploadCard }) {
   const [uploadError, setUploadError] = useState("");
   const [avatarError, setAvatarError] = useState("");
+  const avatarPreviewUrlRef = useRef("");
+  const cardPreviewUrlRef = useRef("");
   const [avatarPreview, setAvatarPreview] = useState(() =>
     isPreviewableImage(currentUser.avatarUrl)
       ? { name: "ຮູບໂປຣໄຟລ໌ປັດຈຸບັນ", src: currentUser.avatarUrl }
@@ -40,6 +43,27 @@ export function ProfilePage({ currentUser, departmentOptions, onSave, onUploadAv
     onSave(profileForm);
   }
 
+  useEffect(() => {
+    return () => {
+      if (avatarPreviewUrlRef.current) URL.revokeObjectURL(avatarPreviewUrlRef.current);
+      if (cardPreviewUrlRef.current) URL.revokeObjectURL(cardPreviewUrlRef.current);
+    };
+  }, []);
+
+  function setLocalPreview(file, setPreview, previewUrlRef) {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    const previewUrl = URL.createObjectURL(file);
+    previewUrlRef.current = previewUrl;
+    setPreview({ name: file.name, src: previewUrl });
+  }
+
+  function clearLocalPreview(previewUrlRef) {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = "";
+    }
+  }
+
   async function handleAvatarImageChange(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -58,18 +82,14 @@ export function ProfilePage({ currentUser, departmentOptions, onSave, onUploadAv
       return;
     }
 
+    setAvatarError("");
+    setLocalPreview(file, setAvatarPreview, avatarPreviewUrlRef);
+
     try {
-      const imageUrl = await compressImageFile(file, {
-        maxBytes: 140_000,
-        maxWidth: 700,
-        quality: 0.76,
-      });
-      setAvatarError("");
-      setAvatarPreview({
-        name: file.name,
-        src: imageUrl,
-      });
-      onUploadAvatar(imageUrl);
+      const imageUrl = await uploadSingleImageFile(file);
+      clearLocalPreview(avatarPreviewUrlRef);
+      setAvatarPreview({ name: file.name, src: imageUrl });
+      await onUploadAvatar(imageUrl);
     } catch (error) {
       setAvatarPreview(null);
       setAvatarError(error.message || "ອ່ານໄຟລ໌ຮູບໂປຣໄຟລ໌ບໍ່ສຳເລັດ");
@@ -95,18 +115,14 @@ export function ProfilePage({ currentUser, departmentOptions, onSave, onUploadAv
       return;
     }
 
+    setUploadError("");
+    setLocalPreview(file, setCardPreview, cardPreviewUrlRef);
+
     try {
-      const imageUrl = await compressImageFile(file, {
-        maxBytes: 180_000,
-        maxWidth: 1000,
-        quality: 0.76,
-      });
-      setUploadError("");
-      setCardPreview({
-        name: file.name,
-        src: imageUrl,
-      });
-      onUploadCard(imageUrl);
+      const imageUrl = await uploadSingleImageFile(file);
+      clearLocalPreview(cardPreviewUrlRef);
+      setCardPreview({ name: file.name, src: imageUrl });
+      await onUploadCard(imageUrl);
     } catch (error) {
       setCardPreview(null);
       setUploadError(error.message || "ອ່ານໄຟລ໌ຮູບບັດບໍ່ສຳເລັດ");
@@ -121,9 +137,6 @@ export function ProfilePage({ currentUser, departmentOptions, onSave, onUploadAv
           <h2 id="profile-title">ຈັດການໂປຣໄຟລ໌</h2>
           <p>ຂໍ້ມູນສ່ວນນີ້ກົງກັບ `members` ແລະ ການອັບໂຫຼດບັດກົງກັບ `student_card_uploads`</p>
         </div>
-        <span className={`status-chip ${currentUser.identityStatus === "verified" ? "green" : "amber"}`}>
-          {identityStatusLabel(currentUser.identityStatus)}
-        </span>
       </div>
       <div className="profile-layout">
         <aside className="profile-card">

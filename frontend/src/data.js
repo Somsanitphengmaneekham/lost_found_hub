@@ -178,18 +178,3 @@ export function imageForCategory(category) {
 
   return fallbackImages[category] || walletImage;
 }
-
-export const matchStatusMeta = {
-  suggested: {
-    label: "ລະບົບແນະນຳ",
-    tone: "amber",
-  },
-  confirmed: {
-    label: "ຢືນຢັນວ່າກົງກັນ",
-    tone: "green",
-  },
-  rejected: {
-    label: "ບໍ່ກົງກັນ",
-    tone: "red",
-  },
-};

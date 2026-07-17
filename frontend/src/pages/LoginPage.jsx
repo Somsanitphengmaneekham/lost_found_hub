@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { CircleHelp, ImagePlus, LogIn, RotateCcw, ShieldCheck, UserPlus } from "lucide-react";
+import { CircleHelp, ImagePlus, KeyRound, LogIn, RotateCcw, ShieldCheck, UserPlus } from "lucide-react";
+import { confirmPasswordReset, requestPasswordResetOtp, verifyPasswordResetOtp } from "../api/auth.js";
 import { FormGrid, TextInput } from "../components/common/FormControls.jsx";
-import { IMAGE_ACCEPT, compressImageFile, isAllowedImageFile } from "../utils/images.js";
+import { IMAGE_ACCEPT, isAllowedImageFile } from "../utils/images.js";
 
 const registerInitial = {
   username: "",
@@ -17,8 +18,24 @@ const registerInitial = {
   cardImageUrl: "",
 };
 
+const resetInitial = {
+  identifier: "",
+  otp: "",
+  resetToken: "",
+  newPassword: "",
+  confirmPassword: "",
+};
+
 function authModeFromHash() {
-  return window.location.hash === "#register" ? "register" : "login";
+  if (window.location.hash === "#register") return "register";
+  if (window.location.hash === "#forgot" || window.location.hash === "#forgot-password") return "forgot";
+  return "login";
+}
+
+function hashForAuthMode(mode) {
+  if (mode === "register") return "#register";
+  if (mode === "forgot") return "#forgot-password";
+  return "#login";
 }
 
 export function LoginPage({
@@ -35,9 +52,15 @@ export function LoginPage({
   const [password, setPassword] = useState("");
   const [localError, setLocalError] = useState("");
   const [registerForm, setRegisterForm] = useState(registerInitial);
+  const [resetForm, setResetForm] = useState(resetInitial);
+  const [resetStep, setResetStep] = useState("request");
+  const [resetStatus, setResetStatus] = useState("");
+  const [resetDebugOtp, setResetDebugOtp] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
   const [cardPreview, setCardPreview] = useState(null);
+  const cardFileRef = useRef(null);
   const cardFileNameRef = useRef("");
-  const cardImageUrlRef = useRef("");
+  const cardPreviewUrlRef = useRef("");
 
   useEffect(() => {
     function syncAuthMode() {
@@ -48,6 +71,12 @@ export function LoginPage({
     window.addEventListener("hashchange", syncAuthMode);
 
     return () => window.removeEventListener("hashchange", syncAuthMode);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (cardPreviewUrlRef.current) URL.revokeObjectURL(cardPreviewUrlRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -64,14 +93,113 @@ export function LoginPage({
     onLogin(username, password);
   }
 
+  function changeAuthMode(mode) {
+    setAuthMode(mode);
+    setLocalError("");
+    const nextHash = hashForAuthMode(mode);
+    if (window.location.hash !== nextHash) window.location.hash = nextHash;
+  }
+
+  function updateReset(field, value) {
+    setResetForm((current) => ({ ...current, [field]: value }));
+    setLocalError("");
+  }
+
+  function resetForgotFlow() {
+    setResetStep("request");
+    setResetStatus("");
+    setResetDebugOtp("");
+    setResetForm((current) => ({
+      ...resetInitial,
+      identifier: current.identifier,
+    }));
+  }
+
+  async function submitResetRequest(event) {
+    event.preventDefault();
+    setResetLoading(true);
+    setLocalError("");
+    setResetStatus("");
+    setResetDebugOtp("");
+
+    try {
+      const response = await requestPasswordResetOtp({
+        identifier: resetForm.identifier,
+      });
+
+      setResetStatus(`ສົ່ງ OTP ໄປທີ່ ${response.destination} ແລ້ວ ລະຫັດຈະໝົດອາຍຸໃນ ${response.expiresInMinutes} ນາທີ`);
+      if (response.debugOtp) setResetDebugOtp(response.debugOtp);
+      setResetStep("verify");
+    } catch (requestError) {
+      setLocalError(requestError.message);
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  async function submitResetVerify(event) {
+    event.preventDefault();
+    setResetLoading(true);
+    setLocalError("");
+
+    try {
+      const response = await verifyPasswordResetOtp({
+        identifier: resetForm.identifier,
+        otp: resetForm.otp,
+      });
+
+      setResetForm((current) => ({ ...current, resetToken: response.resetToken }));
+      setResetStatus(`OTP ຖືກຕ້ອງ ກະລຸນາຕັ້ງລະຫັດຜ່ານໃໝ່ພາຍໃນ ${response.expiresInMinutes} ນາທີ`);
+      setResetStep("reset");
+    } catch (verifyError) {
+      setLocalError(verifyError.message);
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  async function submitResetConfirm(event) {
+    event.preventDefault();
+    setResetLoading(true);
+    setLocalError("");
+
+    if (resetForm.newPassword !== resetForm.confirmPassword) {
+      setResetLoading(false);
+      setLocalError("ລະຫັດຜ່ານຢືນຢັນບໍ່ກົງກັນ");
+      return;
+    }
+
+    try {
+      await confirmPasswordReset({
+        resetToken: resetForm.resetToken,
+        newPassword: resetForm.newPassword,
+      });
+
+      setPassword("");
+      setResetForm(resetInitial);
+      setResetStep("request");
+      setResetDebugOtp("");
+      setResetStatus("ປ່ຽນລະຫັດຜ່ານສຳເລັດ ກະລຸນາເຂົ້າສູ່ລະບົບດ້ວຍລະຫັດໃໝ່");
+      changeAuthMode("login");
+    } catch (confirmError) {
+      setLocalError(confirmError.message);
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
   function updateRegister(field, value) {
     setRegisterForm((current) => ({ ...current, [field]: value }));
     setLocalError("");
   }
 
   function clearCardImage() {
+    if (cardPreviewUrlRef.current) {
+      URL.revokeObjectURL(cardPreviewUrlRef.current);
+      cardPreviewUrlRef.current = "";
+    }
+    cardFileRef.current = null;
     cardFileNameRef.current = "";
-    cardImageUrlRef.current = "";
     setCardPreview(null);
   }
 
@@ -80,11 +208,11 @@ export function LoginPage({
     onRegister({
       ...registerForm,
       cardFileName: cardFileNameRef.current,
-      cardImageUrl: cardImageUrlRef.current,
+      cardImageFile: cardFileRef.current,
     });
   }
 
-  async function handleCardImageChange(event) {
+  function handleCardImageChange(event) {
     const file = event.target.files?.[0];
 
     if (!file) {
@@ -110,24 +238,16 @@ export function LoginPage({
 
     event.target.setCustomValidity("");
 
-    try {
-      const imageUrl = await compressImageFile(file, {
-        maxBytes: 180_000,
-        maxWidth: 1000,
-        quality: 0.76,
-      });
-      cardFileNameRef.current = file.name;
-      cardImageUrlRef.current = imageUrl;
-      setCardPreview({
-        name: file.name,
-        src: imageUrl,
-      });
-    } catch (error) {
-      clearCardImage();
-      event.target.setCustomValidity(error.message || "ອ່ານໄຟລ໌ຮູບບັດບໍ່ສຳເລັດ");
-      event.target.reportValidity();
-      event.target.value = "";
-    }
+    if (cardPreviewUrlRef.current) URL.revokeObjectURL(cardPreviewUrlRef.current);
+
+    const previewUrl = URL.createObjectURL(file);
+    cardPreviewUrlRef.current = previewUrl;
+    cardFileRef.current = file;
+    cardFileNameRef.current = file.name;
+    setCardPreview({
+      name: file.name,
+      src: previewUrl,
+    });
   }
 
   return (
@@ -160,10 +280,7 @@ export function LoginPage({
           <div className="auth-tabs" role="tablist" aria-label="ເລືອກເຂົ້າລະບົບ ຫຼື ສະໝັກສະມາຊິກ">
             <button
               className={authMode === "login" ? "selected" : ""}
-              onClick={() => {
-                setAuthMode("login");
-                if (window.location.hash !== "#login") window.location.hash = "#login";
-              }}
+              onClick={() => changeAuthMode("login")}
               type="button"
             >
               <LogIn size={17} />
@@ -171,10 +288,7 @@ export function LoginPage({
             </button>
             <button
               className={authMode === "register" ? "selected" : ""}
-              onClick={() => {
-                setAuthMode("register");
-                if (window.location.hash !== "#register") window.location.hash = "#register";
-              }}
+              onClick={() => changeAuthMode("register")}
               type="button"
             >
               <UserPlus size={17} />
@@ -201,13 +315,17 @@ export function LoginPage({
                   value={password}
                 />
               </label>
+              <button className="forgot-link" onClick={() => changeAuthMode("forgot")} type="button">
+                ລືມລະຫັດຜ່ານ?
+              </button>
+              {resetStatus && <div className="forgot-status success">{resetStatus}</div>}
               {error && <div className="login-error">{error}</div>}
               <button className="button button-primary" type="submit">
                 <LogIn size={18} />
                 ເຂົ້າສູ່ລະບົບ
               </button>
             </form>
-          ) : (
+          ) : authMode === "register" ? (
             <form className="register-form" key="register-form" onSubmit={submitRegister}>
               <FormGrid>
                 <TextInput
@@ -310,6 +428,112 @@ export function LoginPage({
                 ສະໝັກສະມາຊິກ
               </button>
             </form>
+          ) : (
+            <div className="forgot-panel" key="forgot-form">
+              <div className="forgot-heading">
+                <span className="forgot-icon">
+                  <KeyRound size={18} />
+                </span>
+                <div>
+                  <h2>ລືມລະຫັດຜ່ານ</h2>
+                  <p>ຮັບ OTP ຜ່ານອີເມວທີ່ຢູ່ໃນບັນຊີຂອງທ່ານ</p>
+                </div>
+              </div>
+
+              {resetStep === "request" && (
+                <form className="forgot-form" onSubmit={submitResetRequest}>
+                  <label className="field">
+                    <span>ຊື່ຜູ້ໃຊ້ / ອີເມວ</span>
+                    <input
+                      autoComplete="username"
+                      onChange={(event) => updateReset("identifier", event.target.value)}
+                      required
+                      value={resetForm.identifier}
+                    />
+                  </label>
+                  {localError && <div className="login-error">{localError}</div>}
+                  <button className="button button-primary" disabled={resetLoading} type="submit">
+                    <KeyRound size={18} />
+                    {resetLoading ? "ກຳລັງສົ່ງ OTP..." : "ສົ່ງ OTP"}
+                  </button>
+                </form>
+              )}
+
+              {resetStep === "verify" && (
+                <form className="forgot-form" onSubmit={submitResetVerify}>
+                  {resetStatus && <div className="forgot-status">{resetStatus}</div>}
+                  {resetDebugOtp && (
+                    <div className="forgot-dev-otp">
+                      OTP ສຳລັບທົດສອບ: <strong>{resetDebugOtp}</strong>
+                    </div>
+                  )}
+                  <label className="field">
+                    <span>OTP</span>
+                    <input
+                      autoComplete="one-time-code"
+                      inputMode="numeric"
+                      maxLength={6}
+                      onChange={(event) => updateReset("otp", event.target.value)}
+                      required
+                      value={resetForm.otp}
+                    />
+                  </label>
+                  {localError && <div className="login-error">{localError}</div>}
+                  <div className="forgot-actions">
+                    <button className="outline-button" onClick={resetForgotFlow} type="button">
+                      ຂໍ OTP ໃໝ່
+                    </button>
+                    <button className="button button-primary" disabled={resetLoading} type="submit">
+                      {resetLoading ? "ກຳລັງກວດສອບ..." : "ຢືນຢັນ OTP"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {resetStep === "reset" && (
+                <form className="forgot-form" onSubmit={submitResetConfirm}>
+                  {resetStatus && <div className="forgot-status success">{resetStatus}</div>}
+                  <label className="field">
+                    <span>ລະຫັດຜ່ານໃໝ່</span>
+                    <input
+                      autoComplete="new-password"
+                      minLength={6}
+                      onChange={(event) => updateReset("newPassword", event.target.value)}
+                      required
+                      type="password"
+                      value={resetForm.newPassword}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>ຢືນຢັນລະຫັດຜ່ານໃໝ່</span>
+                    <input
+                      autoComplete="new-password"
+                      minLength={6}
+                      onChange={(event) => updateReset("confirmPassword", event.target.value)}
+                      required
+                      type="password"
+                      value={resetForm.confirmPassword}
+                    />
+                  </label>
+                  {localError && <div className="login-error">{localError}</div>}
+                  <button className="button button-primary" disabled={resetLoading} type="submit">
+                    <KeyRound size={18} />
+                    {resetLoading ? "ກຳລັງບັນທຶກ..." : "ປ່ຽນລະຫັດຜ່ານ"}
+                  </button>
+                </form>
+              )}
+
+              <button
+                className="forgot-link align-left"
+                onClick={() => {
+                  resetForgotFlow();
+                  changeAuthMode("login");
+                }}
+                type="button"
+              >
+                ກັບໄປໜ້າເຂົ້າສູ່ລະບົບ
+              </button>
+            </div>
           )}
         </div>
       </section>

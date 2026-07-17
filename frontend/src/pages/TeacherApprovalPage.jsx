@@ -3,14 +3,26 @@ import { Check, CircleHelp, ClipboardCheck, MapPin, PackageCheck, Search, X } fr
 import { statusMeta } from "../data.js";
 import { approvalSortValue, joinDetail, lostStatusLabel, normalizeText } from "../utils/ui.js";
 import { EmptyState } from "../components/common/FormControls.jsx";
+import { StudentSearchCombobox } from "../components/common/StudentSearchCombobox.jsx";
 
 const APPROVAL_STATUSES = new Set(["awaiting_handover", "pending_approval"]);
-const COMPLETED_FOUND_STATUSES = new Set(["approved", "matched", "returned"]);
-const COMPLETED_LOST_STATUSES = new Set(["published", "matched", "closed", "resolved"]);
 
 function isCompletedItem(item) {
-  if (item.kind === "lost") return COMPLETED_LOST_STATUSES.has(item.status);
-  return COMPLETED_FOUND_STATUSES.has(item.status);
+  if (item.kind === "lost") return ["published", "matched"].includes(item.status);
+  return ["approved", "matched"].includes(item.status);
+}
+
+function isReturnedItem(item) {
+  if (item.kind === "lost") return ["closed", "resolved"].includes(item.status);
+  return item.status === "returned";
+}
+
+function matchesStatusFilter(item, filter) {
+  if (filter === "all") return true;
+  if (filter === "needs_review") return APPROVAL_STATUSES.has(item.status);
+  if (filter === "approved") return isCompletedItem(item);
+  if (filter === "returned") return isReturnedItem(item);
+  return item.status === filter;
 }
 
 function statusLabel(item) {
@@ -38,11 +50,37 @@ function personLabel(item) {
   return item.kind === "lost" ? "ຜູ້ແຈ້ງ" : "ຜູ້ພົບ";
 }
 
-export function TeacherApprovalPage({ categoryOptions, items, onApprove, onMoveToApproval, onReject, stats }) {
+export function TeacherApprovalPage({
+  categoryOptions,
+  items,
+  onApprove,
+  onMoveToApproval,
+  onReject,
+  onReturn,
+  saving,
+  stats,
+  students,
+}) {
   const [approvalSearch, setApprovalSearch] = useState("");
   const [approvalCategory, setApprovalCategory] = useState("ທັງໝົດ");
-  const [approvalStatus, setApprovalStatus] = useState("needs_review");
+  const [approvalStatus, setApprovalStatus] = useState("all");
+  const [returnRecipients, setReturnRecipients] = useState({});
+  const [returningItemId, setReturningItemId] = useState(null);
   const query = normalizeText(approvalSearch);
+
+  async function handleReturn(item) {
+    const receivedByMemberId = Number(returnRecipients[item.id]);
+    if (!receivedByMemberId) return;
+
+    setReturningItemId(item.id);
+    try {
+      await onReturn(item.id, receivedByMemberId);
+      setReturnRecipients((current) => ({ ...current, [item.id]: "" }));
+    } finally {
+      setReturningItemId(null);
+    }
+  }
+
   const visibleItems = items
     .filter((item) => {
       const inSearch =
@@ -51,12 +89,7 @@ export function TeacherApprovalPage({ categoryOptions, items, onApprove, onMoveT
           `${item.title} ${item.location} ${item.description} ${item.personName} ${item.finder} ${item.owner} ${item.color}`,
         ).includes(query);
       const inCategory = approvalCategory === "ທັງໝົດ" || item.category === approvalCategory;
-      const inStatus =
-        approvalStatus === "needs_review"
-          ? APPROVAL_STATUSES.has(item.status)
-          : approvalStatus === "approved"
-            ? isCompletedItem(item)
-            : item.status === approvalStatus;
+      const inStatus = matchesStatusFilter(item, approvalStatus);
 
       return inSearch && inCategory && inStatus;
     })
@@ -66,8 +99,8 @@ export function TeacherApprovalPage({ categoryOptions, items, onApprove, onMoveT
     <section className="teacher-approval-page" id="approval" aria-labelledby="approval-title">
       <div className="teacher-approval-head">
         <div>
-          <h2 id="approval-title">ລາຍການທີ່ລໍຖ້າການອະນຸມັດ</h2>
-          <p>ກວດສອບປະກາດຂອງສູນຫາຍ ແລະ ຂອງທີ່ພົບ ກ່ອນເຜີຍແຜ່ເທິງໜ້າເວັບຂອງຄະນະ</p>
+          <h2 id="approval-title">ອະນຸມັດ ແລະ ຕິດຕາມສະຖານະ</h2>
+          <p>ກວດສອບປະກາດກ່ອນເຜີຍແຜ່ ແລະ ບັນທຶກການສົ່ງຄືນສິ່ງຂອງໃຫ້ເຈົ້າຂອງ</p>
         </div>
         <span className="approval-count-pill">
           <ClipboardCheck size={17} />
@@ -97,10 +130,12 @@ export function TeacherApprovalPage({ categoryOptions, items, onApprove, onMoveT
         <label className="approval-select">
           <span className="sr-only">ສະຖານະ</span>
           <select onChange={(event) => setApprovalStatus(event.target.value)} value={approvalStatus}>
+            <option value="all">ລາຍການທັງໝົດ</option>
             <option value="needs_review">ລໍຖ້າກວດສອບທັງໝົດ</option>
             <option value="pending_approval">ລໍຖ້າອະນຸມັດ</option>
             <option value="awaiting_handover">ລໍຖ້າຮັບສິ່ງຂອງ</option>
             <option value="approved">ອະນຸມັດແລ້ວ</option>
+            <option value="returned">ສົ່ງຄືນເຈົ້າຂອງແລ້ວ</option>
             <option value="rejected">ປະຕິເສດ</option>
           </select>
         </label>
@@ -154,7 +189,36 @@ export function TeacherApprovalPage({ categoryOptions, items, onApprove, onMoveT
                       ປະຕິເສດ
                     </button>
                   )}
-                  {isCompletedItem(item) && <span className="approval-result green">ອະນຸມັດແລ້ວ</span>}
+                  {item.kind === "found" && isCompletedItem(item) && (
+                    <div className="return-status-controls">
+                      <StudentSearchCombobox
+                        itemTitle={item.title}
+                        onChange={(studentId) =>
+                          setReturnRecipients((current) => ({
+                            ...current,
+                            [item.id]: studentId,
+                          }))
+                        }
+                        students={students}
+                        value={returnRecipients[item.id] ?? ""}
+                      />
+                      <button
+                        className="return-button"
+                        disabled={saving || returningItemId === item.id || !returnRecipients[item.id]}
+                        onClick={() => handleReturn(item)}
+                        type="button"
+                      >
+                        <PackageCheck size={17} />
+                        {returningItemId === item.id ? "ກຳລັງບັນທຶກ..." : "ສົ່ງຄືນເຈົ້າຂອງແລ້ວ"}
+                      </button>
+                    </div>
+                  )}
+                  {isCompletedItem(item) && item.kind === "lost" && (
+                    <span className="approval-result green">ອະນຸມັດແລ້ວ</span>
+                  )}
+                  {isReturnedItem(item) && (
+                    <span className="approval-result returned">ສົ່ງຄືນເຈົ້າຂອງແລ້ວ</span>
+                  )}
                   {item.status === "rejected" && <span className="approval-result red">ປະຕິເສດແລ້ວ</span>}
                 </div>
               </article>
@@ -176,6 +240,10 @@ export function TeacherApprovalPage({ categoryOptions, items, onApprove, onMoveT
               <strong>{stats.approved}</strong>
             </div>
             <div>
+              <span>ສົ່ງຄືນແລ້ວ</span>
+              <strong>{stats.returned}</strong>
+            </div>
+            <div>
               <span>ປະຕິເສດ</span>
               <strong>{stats.rejected}</strong>
             </div>
@@ -190,6 +258,10 @@ export function TeacherApprovalPage({ categoryOptions, items, onApprove, onMoveT
             <p>
               <CircleHelp size={16} />
               ສຳລັບຂອງທີ່ພົບ ໃຫ້ອະນຸມັດເມື່ອກວດສອບກັບສິ່ງຂອງຈິງທີ່ຫ້ອງຄຸ້ມຄອງແລ້ວ.
+            </p>
+            <p>
+              <CircleHelp size={16} />
+              ເມື່ອຄືນຂອງ ຕ້ອງເລືອກນັກສຶກສາຜູ້ຮັບຄືນໃຫ້ຖືກຕ້ອງກ່ອນບັນທຶກ.
             </p>
           </article>
         </aside>

@@ -1,4 +1,8 @@
 import { resolveCategoryId, resolveLocationId } from "../services/lookups.js";
+import {
+  notifyPostAuthorOfDecision,
+  notifyTeachersOfPostSubmission,
+} from "../services/post-notification-service.js";
 import { findCandidateMatches } from "../services/weightedScoreMatching.js";
 import { parsePositiveId, requireFields } from "../utils/shared.js";
 
@@ -31,6 +35,7 @@ const FOUND_SELECT = `
     fp.approved_by AS approvedById,
     approver.username AS approvedBy,
     fp.approved_at AS approvedAt,
+    fp.reject_reason AS rejectReason,
     CONCAT(finder.first_name, ' ', finder.last_name) AS finderName,
     COALESCE(fp.description, finder.email) AS finderContact,
     COALESCE(finder.phone, finder.email) AS finderEmail,
@@ -87,6 +92,12 @@ function createHttpError(message, statusCode = 400) {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
+}
+
+function dispatchEmailNotification(task, eventName) {
+  void task.catch((error) => {
+    console.error(`[email-notification] ${eventName} failed`, error?.message || error);
+  });
 }
 
 function normalizePostImageUrls(imageUrls, { required = true } = {}) {
@@ -306,7 +317,12 @@ export function registerPostsRoutes(app, pool) {
       });
 
       const [rows] = await pool.execute(`${FOUND_SELECT} WHERE fp.id = ? LIMIT 1`, [result.insertId]);
-      res.status(201).json(rows[0]);
+      const post = rows[0];
+      res.status(201).json(post);
+      dispatchEmailNotification(
+        notifyTeachersOfPostSubmission(pool, { postType: "found", post }),
+        `found-post-submitted:${post.id}`,
+      );
     } catch (error) {
       next(error);
     }
@@ -380,12 +396,20 @@ export function registerPostsRoutes(app, pool) {
   app.post("/api/found-posts/:id/move-to-approval", async (req, res, next) => {
     try {
       const id = parsePositiveId(req.params.id);
+      const currentPost = await foundAccessRow(pool, id);
       await pool.execute(
         `UPDATE found_posts SET status = 'pending_approval' WHERE id = ? AND deleted_at IS NULL`,
         [id],
       );
       const [rows] = await pool.execute(`${FOUND_SELECT} WHERE fp.id = ? LIMIT 1`, [id]);
-      res.json(rows[0]);
+      const post = rows[0];
+      res.json(post);
+      if (currentPost.status !== "pending_approval") {
+        dispatchEmailNotification(
+          notifyTeachersOfPostSubmission(pool, { postType: "found", post }),
+          `found-post-ready-for-approval:${post.id}`,
+        );
+      }
     } catch (error) {
       next(error);
     }
@@ -394,6 +418,7 @@ export function registerPostsRoutes(app, pool) {
   app.post("/api/found-posts/:id/approve", async (req, res, next) => {
     try {
       const id = parsePositiveId(req.params.id);
+      const currentPost = await foundAccessRow(pool, id);
       const approvedBy = await requireTeacherApprover(pool, req.body.approvedByMemberId);
 
       await pool.execute(
@@ -408,7 +433,14 @@ export function registerPostsRoutes(app, pool) {
       await rebuildMatchesForFound(pool, id);
 
       const [rows] = await pool.execute(`${FOUND_SELECT} WHERE fp.id = ? LIMIT 1`, [id]);
-      res.json(rows[0]);
+      const post = rows[0];
+      res.json(post);
+      if (currentPost.status !== "approved") {
+        dispatchEmailNotification(
+          notifyPostAuthorOfDecision(pool, { postType: "found", postId: id, decision: "approved" }),
+          `found-post-approved:${id}`,
+        );
+      }
     } catch (error) {
       next(error);
     }
@@ -417,14 +449,128 @@ export function registerPostsRoutes(app, pool) {
   app.post("/api/found-posts/:id/reject", async (req, res, next) => {
     try {
       const id = parsePositiveId(req.params.id);
+      const currentPost = await foundAccessRow(pool, id);
+      await requireTeacherApprover(pool, req.body.rejectedByMemberId);
+      const rejectReason = String(req.body.reason || "").trim() || null;
       await pool.execute(
-        `UPDATE found_posts SET status = 'rejected' WHERE id = ? AND deleted_at IS NULL`,
-        [id],
+        `UPDATE found_posts SET status = 'rejected', reject_reason = ? WHERE id = ? AND deleted_at IS NULL`,
+        [rejectReason, id],
       );
       const [rows] = await pool.execute(`${FOUND_SELECT} WHERE fp.id = ? LIMIT 1`, [id]);
-      res.json(rows[0]);
+      const post = rows[0];
+      res.json(post);
+      if (currentPost.status !== "rejected") {
+        dispatchEmailNotification(
+          notifyPostAuthorOfDecision(pool, {
+            postType: "found",
+            postId: id,
+            decision: "rejected",
+            reason: rejectReason,
+          }),
+          `found-post-rejected:${id}`,
+        );
+      }
     } catch (error) {
       next(error);
+    }
+  });
+
+  app.post("/api/found-posts/:id/return", async (req, res, next) => {
+    const connection = await pool.getConnection();
+
+    try {
+      const id = parsePositiveId(req.params.id);
+      const returnedBy = await requireTeacherApprover(connection, req.body.returnedByMemberId);
+      const receivedBy = parsePositiveId(req.body.receivedByMemberId);
+      const currentPost = await foundAccessRow(connection, id);
+
+      if (!["approved", "matched"].includes(currentPost.status)) {
+        throw createHttpError("ສາມາດບັນທຶກການຄືນໄດ້ສະເພາະລາຍການທີ່ອະນຸມັດແລ້ວ", 409);
+      }
+
+      const [receiverRows] = await connection.execute(
+        `SELECT id FROM members WHERE id = ? AND role = 'student' AND is_active = 1 LIMIT 1`,
+        [receivedBy],
+      );
+      if (!receiverRows.length) {
+        throw createHttpError("ກະລຸນາເລືອກນັກສຶກສາຜູ້ຮັບຄືນທີ່ຍັງເປີດໃຊ້ງານ", 400);
+      }
+
+      const [lostRows] = await connection.execute(
+        `
+          SELECT lp.id
+          FROM matches m
+          INNER JOIN lost_posts lp ON lp.id = m.lost_post_id
+          WHERE m.found_post_id = ?
+            AND lp.owner_id = ?
+            AND lp.deleted_at IS NULL
+            AND lp.status NOT IN ('closed', 'resolved', 'deleted')
+          ORDER BY m.match_score DESC, m.created_at DESC
+          LIMIT 1
+        `,
+        [id, receivedBy],
+      );
+      const lostPostId = lostRows[0]?.id ?? null;
+      const note = String(req.body.note || "").trim() || "ຄືນສິ່ງຂອງທີ່ຫ້ອງຄຸ້ມຄອງ";
+
+      await connection.beginTransaction();
+
+      const [claimResult] = await connection.execute(
+        `
+          INSERT INTO claim_requests (
+            found_post_id,
+            claimant_id,
+            lost_post_id,
+            claim_message,
+            status,
+            verified_by,
+            verified_at
+          ) VALUES (?, ?, ?, ?, 'returned', ?, NOW())
+        `,
+        [id, receivedBy, lostPostId, "ຢືນຢັນຮັບສິ່ງຂອງຄືນທີ່ຫ້ອງຄຸ້ມຄອງ", returnedBy],
+      );
+
+      const [returnResult] = await connection.execute(
+        `
+          INSERT INTO return_records (
+            claim_request_id,
+            found_post_id,
+            returned_by,
+            received_by,
+            return_location_id,
+            note,
+            returned_at
+          ) VALUES (?, ?, ?, ?, NULL, ?, NOW())
+        `,
+        [claimResult.insertId, id, returnedBy, receivedBy, note],
+      );
+
+      await connection.execute(`UPDATE found_posts SET status = 'returned' WHERE id = ?`, [id]);
+      if (lostPostId) {
+        await connection.execute(`UPDATE lost_posts SET status = 'closed' WHERE id = ?`, [lostPostId]);
+      }
+
+      await connection.commit();
+
+      const [postRows] = await connection.execute(`${FOUND_SELECT} WHERE fp.id = ? LIMIT 1`, [id]);
+      res.status(201).json({
+        post: postRows[0],
+        returnRecord: {
+          id: returnResult.insertId,
+          claimRequestId: claimResult.insertId,
+          foundPostId: id,
+          returnedBy,
+          receivedBy,
+          lostPostId,
+          returnLocation: "ຫ້ອງຄຸ້ມຄອງ",
+          returnedAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      await connection.rollback();
+      next(error);
+    } finally {
+      connection.release();
     }
   });
 
@@ -513,10 +659,15 @@ export function registerPostsRoutes(app, pool) {
         imageUrls,
       });
 
-      const matches = [];
+      const matches = await findCandidateMatches(pool, result.insertId);
       const [rows] = await pool.execute(`${LOST_SELECT} WHERE lp.id = ? LIMIT 1`, [result.insertId]);
+      const post = rows[0];
 
-      res.status(201).json({ post: rows[0], matchCount: matches.length });
+      res.status(201).json({ post, matchCount: matches.length });
+      dispatchEmailNotification(
+        notifyTeachersOfPostSubmission(pool, { postType: "lost", post }),
+        `lost-post-submitted:${post.id}`,
+      );
     } catch (error) {
       next(error);
     }
@@ -583,6 +734,8 @@ export function registerPostsRoutes(app, pool) {
         });
       }
 
+      await findCandidateMatches(pool, id);
+
       const [rows] = await pool.execute(`${LOST_SELECT} WHERE lp.id = ? LIMIT 1`, [id]);
       if (!rows.length) return res.status(404).json({ error: "ບໍ່ພົບຂໍ້ມູນຂອງສູນຫາຍ" });
       return res.json(rows[0]);
@@ -594,6 +747,7 @@ export function registerPostsRoutes(app, pool) {
   app.post("/api/lost-posts/:id/approve", async (req, res, next) => {
     try {
       const id = parsePositiveId(req.params.id);
+      const currentPost = await lostAccessRow(pool, id);
       await requireTeacherApprover(pool, req.body.approvedByMemberId);
 
       await pool.execute(
@@ -607,7 +761,14 @@ export function registerPostsRoutes(app, pool) {
 
       const matches = await findCandidateMatches(pool, id);
       const [rows] = await pool.execute(`${LOST_SELECT} WHERE lp.id = ? LIMIT 1`, [id]);
-      res.json({ post: rows[0], matchCount: matches.length });
+      const post = rows[0];
+      res.json({ post, matchCount: matches.length });
+      if (currentPost.status !== "published") {
+        dispatchEmailNotification(
+          notifyPostAuthorOfDecision(pool, { postType: "lost", postId: id, decision: "approved" }),
+          `lost-post-approved:${id}`,
+        );
+      }
     } catch (error) {
       next(error);
     }
@@ -616,13 +777,28 @@ export function registerPostsRoutes(app, pool) {
   app.post("/api/lost-posts/:id/reject", async (req, res, next) => {
     try {
       const id = parsePositiveId(req.params.id);
+      const currentPost = await lostAccessRow(pool, id);
+      await requireTeacherApprover(pool, req.body.rejectedByMemberId);
+      const rejectReason = String(req.body.reason || "").trim() || null;
       await pool.execute(
         `UPDATE lost_posts SET status = 'rejected' WHERE id = ? AND deleted_at IS NULL`,
         [id],
       );
-      await pool.execute(`DELETE FROM matches WHERE lost_post_id = ? AND status = 'suggested'`, [id]);
+      await pool.execute(`DELETE FROM matches WHERE lost_post_id = ?`, [id]);
       const [rows] = await pool.execute(`${LOST_SELECT} WHERE lp.id = ? LIMIT 1`, [id]);
-      res.json(rows[0]);
+      const post = rows[0];
+      res.json(post);
+      if (currentPost.status !== "rejected") {
+        dispatchEmailNotification(
+          notifyPostAuthorOfDecision(pool, {
+            postType: "lost",
+            postId: id,
+            decision: "rejected",
+            reason: rejectReason,
+          }),
+          `lost-post-rejected:${id}`,
+        );
+      }
     } catch (error) {
       next(error);
     }
@@ -663,7 +839,7 @@ async function rebuildMatchesForFound(pool, foundPostId) {
   if (!found || found.status !== "approved") return [];
 
   const [lostRows] = await pool.execute(
-    `SELECT * FROM lost_posts WHERE status = 'published' AND deleted_at IS NULL`,
+    `SELECT * FROM lost_posts WHERE status IN ('pending_approval', 'published') AND deleted_at IS NULL`,
   );
 
   const saved = [];
@@ -673,23 +849,21 @@ async function rebuildMatchesForFound(pool, foundPostId) {
     if (result.score < 70) continue;
 
     const [existingRows] = await pool.execute(
-      `SELECT id, status FROM matches WHERE lost_post_id = ? AND found_post_id = ? LIMIT 1`,
+      `SELECT id FROM matches WHERE lost_post_id = ? AND found_post_id = ? LIMIT 1`,
       [lost.id, found.id],
     );
 
     if (existingRows[0]) {
-      if (existingRows[0].status === "suggested") {
-        await pool.execute(`UPDATE matches SET match_score = ? WHERE id = ?`, [
-          result.score,
-          existingRows[0].id,
-        ]);
-      }
+      await pool.execute(`UPDATE matches SET match_score = ? WHERE id = ?`, [
+        result.score,
+        existingRows[0].id,
+      ]);
       saved.push(existingRows[0].id);
       continue;
     }
 
     const [insertResult] = await pool.execute(
-      `INSERT INTO matches (lost_post_id, found_post_id, match_score, status) VALUES (?, ?, ?, 'suggested')`,
+      `INSERT INTO matches (lost_post_id, found_post_id, match_score) VALUES (?, ?, ?)`,
       [lost.id, found.id, result.score],
     );
     saved.push(insertResult.insertId);

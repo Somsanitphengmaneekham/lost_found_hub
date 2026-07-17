@@ -43,8 +43,8 @@ export async function resolveLocationId(pool, locationName) {
   if (!rows.length) {
     const [result] = await pool.execute(
       `
-        INSERT INTO locations (name_th, building, floor, detail, location_type, is_active)
-        VALUES (?, NULL, NULL, NULL, 'both', 1)
+        INSERT INTO locations (name_th, building, floor, detail, is_active)
+        VALUES (?, NULL, NULL, NULL, 1)
       `,
       [name],
     );

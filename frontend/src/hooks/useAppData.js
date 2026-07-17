@@ -42,8 +42,7 @@ export function useAppData() {
         (data.members ?? data.demoUsers ?? []).map((member) => ({
           ...member,
           isActive: member.isActive ?? true,
-          identityStatus:
-            member.identityStatus ?? (member.role === "teacher" ? "verified" : "pending"),
+          identityStatus: member.identityStatus ?? "verified",
         })),
       );
     } catch (error) {

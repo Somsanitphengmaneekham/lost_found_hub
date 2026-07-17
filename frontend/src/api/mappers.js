@@ -55,6 +55,7 @@ export function mapFoundFromApi(row) {
     status: row.status,
     approvedBy: row.approvedBy ?? "",
     approvedAt: row.approvedAt ? new Date(row.approvedAt).toISOString() : "",
+    rejectReason: row.rejectReason ?? "",
     image: images[0]?.src || imageForCategory(row.categoryName),
     images,
   };

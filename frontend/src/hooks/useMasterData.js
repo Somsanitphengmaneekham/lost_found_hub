@@ -12,9 +12,9 @@ import {
 } from "../api/masterData.js";
 import {
   createTeacherMember,
+  deleteMember,
   updateMember,
   updateMemberActiveStatus,
-  updateMemberIdentityStatus,
 } from "../api/auth.js";
 
 export function useMasterData({
@@ -321,14 +321,14 @@ export function useMasterData({
     }
   }
 
-  async function updateMemberIdentity(member, identityStatus) {
+  async function removeMember(member) {
     setMasterDataSaving(true);
     try {
-      await updateMemberIdentityStatus(member.id, identityStatus, currentUser.id);
+      await deleteMember(member.id, currentUser.id);
       await loadAppData();
-      setToast(`ອັບເດດສະຖານະຢືນຢັນຕົວຕົນຂອງ ${member.username} ແລ້ວ`);
+      setToast(`ລຶບບັນຊີນັກສຶກສາ ${member.username} ແລ້ວ`);
     } catch (error) {
-      setToast(error.message || "ອັບເດດສະຖານະຢືນຢັນບໍ່ສຳເລັດ");
+      setToast(error.message || "ລຶບບັນຊີນັກສຶກສາບໍ່ສຳເລັດ");
     } finally {
       setMasterDataSaving(false);
     }
@@ -347,7 +347,7 @@ export function useMasterData({
     removeDepartment,
     toggleDepartmentActive,
     saveMember,
+    removeMember,
     toggleMemberActive,
-    updateMemberIdentity,
   };
 }

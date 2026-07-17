@@ -14,7 +14,6 @@ import { LostReportPage } from "./pages/LostReportPage.jsx";
 import { ProfilePage } from "./pages/ProfilePage.jsx";
 import { TeacherApprovalPage } from "./pages/TeacherApprovalPage.jsx";
 import { MasterDataPage } from "./pages/MasterDataPage.jsx";
-import { ReviewPage } from "./pages/ReviewPage.jsx";
 import { MatchingPage } from "./pages/MatchingPage.jsx";
 import { ReportsPage } from "./pages/ReportsPage.jsx";
 import { NotificationsPage } from "./pages/NotificationsPage.jsx";
@@ -24,7 +23,6 @@ import { useAppData } from "./hooks/useAppData.js";
 import { useSession } from "./hooks/useSession.js";
 import { useFoundPosts } from "./hooks/useFoundPosts.js";
 import { useLostPosts } from "./hooks/useLostPosts.js";
-import { useMatches } from "./hooks/useMatches.js";
 import { useMasterData } from "./hooks/useMasterData.js";
 import { useRouter } from "./hooks/useRouter.js";
 
@@ -32,8 +30,6 @@ const MATCH_THRESHOLD = 70;
 const PUBLIC_FOUND_STATUSES = new Set(["approved", "matched"]);
 const HOME_STATUS_ALL = "all";
 const APPROVAL_STATUSES = new Set(["awaiting_handover", "pending_approval"]);
-const COMPLETED_FOUND_STATUSES = new Set(["approved", "matched", "returned"]);
-const COMPLETED_LOST_STATUSES = new Set(["published", "matched", "closed", "resolved"]);
 const REVIEW_ROLES = new Set(["teacher"]);
 
 function activeMasterNames(items) {
@@ -68,6 +64,10 @@ function App() {
     masterDataError,
     loadAppData,
   } = appData;
+
+  useEffect(() => {
+    void loadAppData();
+  }, [loadAppData]);
 
   // ── Session (Fix 1: localStorage persistence) ─────────────────────────────
   const session = useSession({ setMemberList, loadAppData, setToast, setLoginError });
@@ -109,6 +109,7 @@ function App() {
     moveToApproval,
     approveFoundItem: approveFoundItemBase,
     rejectFoundItem,
+    returnFoundItem,
   } = foundPosts;
 
   function startEditFound(id) {
@@ -120,7 +121,14 @@ function App() {
   }
 
   // ── Lost posts ─────────────────────────────────────────────────────────────
-  const lostPosts = useLostPosts({ currentUser, lostReports, loadAppData, categoryFormOptions, setToast });
+  const lostPosts = useLostPosts({
+    currentUser,
+    lostReports,
+    loadAppData,
+    categoryFormOptions,
+    navigateToPage,
+    setToast,
+  });
   const {
     lostForm,
     editingLostId,
@@ -139,15 +147,6 @@ function App() {
   function approveLostItem(id) {
     return approveLostItemBase(id, setSelectedItemId);
   }
-
-  // ── Matches ────────────────────────────────────────────────────────────────
-  const { confirmMatch, rejectMatch, markReturned } = useMatches({
-    matchRows,
-    lostReports,
-    currentUser,
-    loadAppData,
-    setToast,
-  });
 
   // ── Master data ────────────────────────────────────────────────────────────
   const masterData = useMasterData({
@@ -233,9 +232,9 @@ function App() {
   const notifications = useMemo(
     () =>
       buildNotifications({
-        currentUser, foundItems, lostReports, matches: matchSummaries, members: memberList, returnRecords,
+        currentUser, foundItems, lostReports, matches: matchSummaries, returnRecords,
       }),
-    [currentUser, foundItems, lostReports, matchSummaries, memberList, returnRecords],
+    [currentUser, foundItems, lostReports, matchSummaries, returnRecords],
   );
 
   const approvalStats = useMemo(() => {
@@ -243,15 +242,21 @@ function App() {
       (acc, item) => {
         if (APPROVAL_STATUSES.has(item.status)) acc.waiting += 1;
         if (
-          (item.kind === "found" && COMPLETED_FOUND_STATUSES.has(item.status)) ||
-          (item.kind === "lost" && COMPLETED_LOST_STATUSES.has(item.status))
+          (item.kind === "found" && ["approved", "matched"].includes(item.status)) ||
+          (item.kind === "lost" && ["published", "matched"].includes(item.status))
         ) {
           acc.approved += 1;
+        }
+        if (
+          (item.kind === "found" && item.status === "returned") ||
+          (item.kind === "lost" && ["closed", "resolved"].includes(item.status))
+        ) {
+          acc.returned += 1;
         }
         if (item.status === "rejected") acc.rejected += 1;
         return acc;
       },
-      { waiting: 0, approved: 0, rejected: 0 },
+      { waiting: 0, approved: 0, returned: 0, rejected: 0 },
     );
   }, [teacherApprovalItems]);
 
@@ -311,18 +316,13 @@ function App() {
           foundItems={foundItems}
           lostReports={lostReports}
           matches={matchSummaries}
-          members={memberList}
           onApproveFound={approveFoundItem}
-          onConfirmMatch={confirmMatch}
           onDeleteFound={deleteFound}
           onDeleteLost={deleteLost}
           onEditFound={startEditFound}
           onEditLost={startEditLost}
           onMoveToApproval={moveToApproval}
           onRejectFound={rejectFoundItem}
-          onRejectMatch={rejectMatch}
-          onReturnMatch={markReturned}
-          onUpdateMemberIdentityStatus={masterData.updateMemberIdentity}
           returnRecords={returnRecords}
         />
       );
@@ -394,7 +394,10 @@ function App() {
           onApprove={approveApprovalItem}
           onMoveToApproval={moveToApproval}
           onReject={rejectApprovalItem}
+          onReturn={returnFoundItem}
+          saving={appSaving}
           stats={approvalStats}
+          students={memberList.filter((member) => member.role === "student" && member.isActive !== false)}
         />
       );
     }
@@ -409,6 +412,7 @@ function App() {
           itemCategories={itemCategories}
           loading={masterDataLoading}
           members={memberList}
+          onDeleteMember={masterData.removeMember}
           onReload={loadAppData}
           onRemoveCategory={masterData.removeCategory}
           onRemoveDepartment={masterData.removeDepartment}
@@ -421,40 +425,17 @@ function App() {
           onToggleDepartmentActive={masterData.toggleDepartmentActive}
           onToggleLocationActive={masterData.toggleLocationActive}
           onToggleMemberActive={masterData.toggleMemberActive}
-          onUpdateMemberIdentityStatus={masterData.updateMemberIdentity}
           saving={masterData.masterDataSaving}
         />
       );
     }
 
-    if (canReview && currentPage === "review") {
-      return (
-        <ReviewPage
-          currentUser={currentUser}
-          foundItems={foundItems}
-          lostReports={lostReports}
-          matches={matchSummaries}
-          onDeleteFound={deleteFound}
-          onDeleteLost={deleteLost}
-          onEditFound={startEditFound}
-          onEditLost={startEditLost}
-          onConfirmMatch={confirmMatch}
-          onRejectMatch={rejectMatch}
-          onReturnMatch={markReturned}
-          returnRecords={returnRecords}
-        />
-      );
-    }
-
-    if (canReview && currentPage === "matching") {
+    if (currentPage === "matching") {
       return (
         <MatchingPage
+          currentUser={currentUser}
           matches={matchSummaries}
-          canReview={canReview}
-          onConfirm={confirmMatch}
-          onReject={rejectMatch}
-          onReturn={markReturned}
-          returnRecords={returnRecords}
+          onViewFound={(foundPostId) => showAnnouncementDetail(`found-${foundPostId}`)}
         />
       );
     }

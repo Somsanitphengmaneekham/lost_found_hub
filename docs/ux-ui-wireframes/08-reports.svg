@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#14323b" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="900" fill="#f5fafb"/>
+  <rect x="20" y="20" width="1160" height="860" rx="0" fill="#ffffff" stroke="#183946" stroke-width="2"/>
+<rect x="40" y="30" width="1120" height="80" rx="0" fill="#24564f" stroke="#24564f" stroke-width="2"/>
+<text x="68" y="72" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="25" font-weight="900" fill="#ffffff">Lost and Found</text>
+<text x="68" y="98" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#d5e4e6">08. Reports / ລາຍງານ · #reports</text>
+<text x="430" y="82" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#d5e4e6">Home</text>
+
+<text x="522" y="82" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#d5e4e6">Dashboard</text>
+
+<text x="614" y="82" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="13" font-weight="800" fill="#ffffff">Reports</text>
+<line x1="586" y1="95" x2="642" y2="95" stroke="#9cffb0" stroke-width="4"/>
+<text x="706" y="82" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#d5e4e6">Report Found</text>
+
+<text x="798" y="82" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#d5e4e6">Report Lost</text>
+
+<text x="890" y="82" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#d5e4e6">Approval</text>
+
+<text x="982" y="82" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" fill="#d5e4e6">Profile</text>
+
+<rect x="1048" y="44" width="34" height="34" rx="4" fill="#2f6760" stroke="#a7c5c8" stroke-width="2"/>
+<text x="1065" y="67" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="500" fill="#ffffff">🔔</text>
+<rect x="1090" y="44" width="34" height="34" rx="4" fill="#2f6760" stroke="#a7c5c8" stroke-width="2"/>
+<text x="1107" y="67" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="500" fill="#ffffff">↪</text>
+<rect x="1132" y="44" width="34" height="34" rx="4" fill="#2f6760" stroke="#a7c5c8" stroke-width="2"/>
+<text x="1149" y="67" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="17" font-weight="500" fill="#ffffff">👤</text>
+  <g filter="url(#shadow)">
+    <rect x="60" y="135" width="1080" height="80" rx="4" fill="#ffffff" stroke="#183946" stroke-width="2"/>
+<text x="78" y="169" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">Report filters</text>
+<text x="82" y="201" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Date range</text>
+<rect x="60" y="245" width="255" height="115" rx="4" fill="#e9f2ff" stroke="#183946" stroke-width="2"/>
+<text x="78" y="279" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">KPI</text>
+<text x="82" y="311" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Lost count</text>
+<rect x="335" y="245" width="255" height="115" rx="4" fill="#e9f2ff" stroke="#183946" stroke-width="2"/>
+<text x="353" y="279" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">KPI</text>
+<text x="357" y="311" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Found count</text>
+<rect x="610" y="245" width="255" height="115" rx="4" fill="#e7f7ef" stroke="#183946" stroke-width="2"/>
+<text x="628" y="279" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">KPI</text>
+<text x="632" y="311" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Returned count</text>
+<rect x="885" y="245" width="255" height="115" rx="4" fill="#fff4d8" stroke="#183946" stroke-width="2"/>
+<text x="903" y="279" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">KPI</text>
+<text x="907" y="311" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Pending count</text>
+<rect x="60" y="390" width="525" height="300" rx="4" fill="#ffffff" stroke="#183946" stroke-width="2"/>
+<text x="78" y="424" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">Charts</text>
+<text x="82" y="456" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Monthly lost/found chart</text>
+<text x="82" y="480" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Category breakdown</text>
+<rect x="615" y="390" width="525" height="300" rx="4" fill="#ffffff" stroke="#183946" stroke-width="2"/>
+<text x="633" y="424" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">Report table</text>
+<text x="637" y="456" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Status summary</text>
+<text x="637" y="480" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• User/member summary</text>
+<text x="637" y="504" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Return records</text>
+<rect x="60" y="720" width="1080" height="80" rx="4" fill="#f4f7f8" stroke="#183946" stroke-width="2"/>
+<text x="78" y="754" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">Role difference</text>
+<text x="82" y="786" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Student sees own statistics; teacher sees faculty-wide statistics</text>
+  </g>
+</svg>

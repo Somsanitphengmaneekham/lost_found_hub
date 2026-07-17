@@ -1,5 +1,4 @@
 import {
-  BadgeCheck,
   BarChart3,
   CalendarDays,
   ClipboardCheck,
@@ -10,14 +9,12 @@ import {
   PackageCheck,
   ShieldCheck,
   TrendingUp,
-  UserCheck,
   Users,
 } from "lucide-react";
-import { matchStatusMeta, statusMeta } from "../data.js";
+import { statusMeta } from "../data.js";
 import { EmptyState } from "../components/common/FormControls.jsx";
 import {
   formatLaoDateTime,
-  identityStatusLabel,
   joinDetail,
   lostStatusLabel,
   roleLabel,
@@ -32,10 +29,6 @@ function numberText(value) {
 
 function safeFoundStatus(status) {
   return statusMeta[status] ?? { label: status || "ບໍ່ລະບຸ", tone: "slate" };
-}
-
-function safeMatchStatus(status) {
-  return matchStatusMeta[status] ?? { label: status || "ບໍ່ລະບຸ", tone: "slate" };
 }
 
 function sortRecent(items) {
@@ -110,12 +103,10 @@ function foundBelongsToUser(item, user) {
   return Number(item.finderId) === Number(user.id) || item.finder === user.fullName;
 }
 
-function matchBelongsToUser(match, user, myLostIds, myFoundIds) {
+function matchBelongsToUser(match, user, myLostIds) {
   return (
     Number(match.lost?.ownerId) === Number(user.id) ||
-    Number(match.found?.finderId) === Number(user.id) ||
-    myLostIds.has(Number(match.lostPostId)) ||
-    myFoundIds.has(Number(match.foundPostId))
+    myLostIds.has(Number(match.lostPostId))
   );
 }
 
@@ -141,22 +132,27 @@ function reportScope({ currentUser, foundItems, lostReports, matches, returnReco
   return {
     foundItems: scopedFoundItems,
     lostReports: scopedLostReports,
-    matches: matches.filter((match) => matchBelongsToUser(match, currentUser, myLostIds, myFoundIds)),
+    matches: matches.filter((match) => matchBelongsToUser(match, currentUser, myLostIds)),
     returnRecords: returnRecords.filter((record) => returnBelongsToUser(record, currentUser, myFoundIds)),
   };
 }
 
 export function ReportsPage({ currentUser, foundItems, lostReports, matches, members, returnRecords }) {
   const isTeacher = currentUser.role === "teacher";
-  const scoped = reportScope({ currentUser, foundItems, lostReports, matches, returnRecords });
+  const recommendationMatches = matches.filter((match) => match.status !== "rejected");
+  const scoped = reportScope({
+    currentUser,
+    foundItems,
+    lostReports,
+    matches: recommendationMatches,
+    returnRecords,
+  });
   const openFoundCount = scoped.foundItems.filter((item) => OPEN_FOUND_STATUSES.has(item.status)).length;
   const openLostCount = scoped.lostReports.filter((item) => OPEN_LOST_STATUSES.has(item.status)).length;
-  const confirmedMatchCount = scoped.matches.filter((item) => item.status === "confirmed").length;
-  const suggestedMatchCount = scoped.matches.filter((item) => item.status === "suggested").length;
+  const recommendationCount = scoped.matches.filter((item) => item.status !== "rejected").length;
   const pendingApprovalCount =
     foundItems.filter((item) => ["awaiting_handover", "pending_approval"].includes(item.status)).length +
     lostReports.filter((item) => item.status === "pending_approval").length;
-  const pendingIdentityCount = members.filter((member) => member.role === "student" && member.identityStatus === "pending").length;
   const categoryRows = countBy([...scoped.foundItems, ...scoped.lostReports], (item) => item.category).slice(0, 6);
   const locationRows = countBy([...scoped.foundItems, ...scoped.lostReports], (item) => item.location).slice(0, 6);
   const foundStatusRows = statusBreakdown(scoped.foundItems, (status) => safeFoundStatus(status).label);
@@ -175,16 +171,14 @@ export function ReportsPage({ currentUser, foundItems, lostReports, matches, mem
         { label: "ປະກາດພົບສີ່ງຂອງທັງໝົດ", value: foundItems.length, icon: Inbox, tone: "green" },
         { label: "ປະກາດສີ່ງຂອງສູນຫາຍທັງໝົດ", value: lostReports.length, icon: FileQuestion, tone: "amber" },
         { label: "ລໍຖ້າອະນຸມັດ", value: pendingApprovalCount, icon: ShieldCheck, tone: "blue" },
-        { label: "Match ທີ່ລໍຖ້າຢືນຢັນ", value: suggestedMatchCount, icon: GitCompare, tone: "purple" },
+        { label: "ລາຍການທີ່ລະບົບແນະນຳ", value: recommendationCount, icon: GitCompare, tone: "purple" },
         { label: "ຄືນຂອງແລ້ວ", value: returnRecords.length, icon: ClipboardCheck, tone: "slate" },
-        { label: "ລໍຖ້າຢືນຢັນຕົວຕົນ", value: pendingIdentityCount, icon: UserCheck, tone: "red" },
       ]
     : [
         { label: "ສີ່ງຂອງສູນຫາຍຂອງຂ້ອຍ", value: scoped.lostReports.length, icon: FileQuestion, tone: "amber" },
         { label: "ສີ່ງຂອງທີ່ຂ້ອຍແຈ້ງພົບ", value: scoped.foundItems.length, icon: Inbox, tone: "green" },
         { label: "ລາຍການທີ່ຍັງເປີດ", value: openFoundCount + openLostCount, icon: PackageCheck, tone: "blue" },
-        { label: "Match ສີ່ງຂອງ ຂອງຂ້ອຍ", value: scoped.matches.length, icon: GitCompare, tone: "purple" },
-        { label: "ຢືນຢັນແລ້ວ", value: confirmedMatchCount, icon: BadgeCheck, tone: "green" },
+        { label: "ລາຍການແນະນຳຂອງຂ້ອຍ", value: recommendationCount, icon: GitCompare, tone: "purple" },
         { label: "ຄືນສີ່ງຂອງແລ້ວ", value: scoped.returnRecords.length, icon: ClipboardCheck, tone: "slate" },
       ];
 
@@ -279,7 +273,7 @@ export function ReportsPage({ currentUser, foundItems, lostReports, matches, mem
           {isTeacher ? (
             <TeacherUserReport members={members} />
           ) : (
-            <StudentAccountReport currentUser={currentUser} suggestedMatchCount={suggestedMatchCount} />
+            <StudentAccountReport currentUser={currentUser} recommendationCount={recommendationCount} />
           )}
         </ReportPanel>
 
@@ -363,8 +357,6 @@ function BreakdownList({ rows, showBars = false, title }) {
 }
 
 function MatchReportRow({ match }) {
-  const meta = safeMatchStatus(match.status);
-
   return (
     <article className="reports-row">
       <div className="reports-score">
@@ -372,7 +364,7 @@ function MatchReportRow({ match }) {
         <span>%</span>
       </div>
       <div>
-        <span className={`status-chip ${meta.tone}`}>{meta.label}</span>
+        <span className="status-chip blue">ລະບົບແນະນຳ</span>
         <h4>{match.lost?.title || "ສີ່ງຂອງສູນຫາຍ"} ↔ {match.found?.title || "ສີ່ງຂອງທີ່ພົບ"}</h4>
         <p>{match.found?.location || match.lost?.location || "ບໍ່ລະບຸສະຖານທີ່"}</p>
         <small>{formatLaoDateTime(match.createdAt)}</small>
@@ -415,7 +407,7 @@ function RecentReportRow({ item }) {
 
 function TeacherUserReport({ members }) {
   const roleRows = countBy(members, (member) => roleLabel(member.role));
-  const identityRows = countBy(members, (member) => identityStatusLabel(member.identityStatus));
+  const accountStatusRows = countBy(members, (member) => (member.isActive ? "ໃຊ້ງານ" : "ປິດໃຊ້ງານ"));
   const activeCount = members.filter((member) => member.isActive).length;
 
   return (
@@ -428,13 +420,13 @@ function TeacherUserReport({ members }) {
       </div>
       <div className="reports-two-column">
         <BreakdownList rows={roleRows} title="Role" />
-        <BreakdownList rows={identityRows} title="Identity" />
+        <BreakdownList rows={accountStatusRows} title="ສະຖານະບັນຊີ" />
       </div>
     </div>
   );
 }
 
-function StudentAccountReport({ currentUser, suggestedMatchCount }) {
+function StudentAccountReport({ currentUser, recommendationCount }) {
   return (
     <div className="reports-account">
       <div className="reports-account-avatar">
@@ -450,12 +442,12 @@ function StudentAccountReport({ currentUser, suggestedMatchCount }) {
           <dd>{roleLabel(currentUser.role)}</dd>
         </div>
         <div>
-          <dt>ຢືນຢັນຕົວຕົນ</dt>
-          <dd>{identityStatusLabel(currentUser.identityStatus)}</dd>
+          <dt>ສະຖານະບັນຊີ</dt>
+          <dd>{currentUser.isActive === false ? "ປິດໃຊ້ງານ" : "ໃຊ້ງານ"}</dd>
         </div>
         <div>
-          <dt>Match ລໍຖ້າກວດ</dt>
-          <dd>{numberText(suggestedMatchCount)}</dd>
+          <dt>ລາຍການທີ່ລະບົບແນະນຳ</dt>
+          <dd>{numberText(recommendationCount)}</dd>
         </div>
       </dl>
     </div>

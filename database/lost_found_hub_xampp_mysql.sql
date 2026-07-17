@@ -28,6 +28,7 @@ DROP TABLE IF EXISTS handover_records;
 DROP TABLE IF EXISTS item_images;
 DROP TABLE IF EXISTS found_posts;
 DROP TABLE IF EXISTS lost_posts;
+DROP TABLE IF EXISTS password_reset_otps;
 DROP TABLE IF EXISTS student_card_uploads;
 DROP TABLE IF EXISTS members;
 DROP TABLE IF EXISTS locations;
@@ -85,7 +86,7 @@ CREATE TABLE members (
   email VARCHAR(180) NOT NULL,
   phone VARCHAR(40) NULL,
   department_id INT UNSIGNED NULL,
-  identity_status ENUM('pending', 'verified', 'rejected') NOT NULL DEFAULT 'pending',
+  identity_status ENUM('pending', 'verified', 'rejected') NOT NULL DEFAULT 'verified',
   card_image_url LONGTEXT NULL,
   avatar_url LONGTEXT NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
@@ -105,12 +106,35 @@ CREATE TABLE members (
     ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE password_reset_otps (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  member_id INT UNSIGNED NOT NULL,
+  channel ENUM('email') NOT NULL,
+  destination VARCHAR(190) NOT NULL,
+  otp_hash VARCHAR(255) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  attempt_count TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  verified_at DATETIME NULL,
+  reset_token_digest VARCHAR(64) NULL,
+  reset_token_expires_at DATETIME NULL,
+  consumed_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_password_reset_member_id (member_id),
+  KEY idx_password_reset_destination (destination),
+  KEY idx_password_reset_expires_at (expires_at),
+  KEY idx_password_reset_token_digest (reset_token_digest),
+  CONSTRAINT fk_password_reset_member
+    FOREIGN KEY (member_id) REFERENCES members(id)
+    ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE student_card_uploads (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   member_id INT UNSIGNED NOT NULL,
   claim_request_id INT UNSIGNED NULL,
   image_url LONGTEXT NOT NULL,
-  status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
+  status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'approved',
   reviewed_by INT UNSIGNED NULL,
   reviewed_at DATETIME NULL,
   reject_reason TEXT NULL,
@@ -296,7 +320,6 @@ CREATE TABLE matches (
   lost_post_id INT UNSIGNED NOT NULL,
   found_post_id INT UNSIGNED NOT NULL,
   match_score DECIMAL(5,2) NOT NULL,
-  status ENUM('suggested','confirmed','rejected') NOT NULL DEFAULT 'suggested',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
   PRIMARY KEY (id),

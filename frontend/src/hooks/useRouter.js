@@ -3,8 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 const ROUTE_ALIASES = {
   "": "home",
   announcements: "home",
+  forgot: "login",
+  "forgot-password": "login",
   register: "login",
   matches: "matching",
+  review: "approval",
 };
 
 const PUBLIC_PAGES = new Set(["home", "announcement-detail", "login"]);
@@ -16,9 +19,10 @@ const STUDENT_PAGES = new Set([
   "reports",
   "found-form",
   "lost-form",
+  "matching",
   "profile",
 ]);
-const TEACHER_PAGES = new Set(["approval", "master-data", "review", "matching"]);
+const TEACHER_PAGES = new Set(["approval", "master-data"]);
 
 function pageFromHash(hash) {
   const page = String(hash ?? "").replace(/^#/, "") || "home";

@@ -11,12 +11,7 @@ const MASTER_TABS = [
   { id: "members", label: "ຜູ້ໃຊ້", table: "members", icon: UserCog },
 ];
 
-const LOCATION_TYPE_OPTIONS = [
-  { value: "both", label: "ພົບ/ສູນຫາຍ/ສົ່ງມອບ" },
-  { value: "found", label: "ພົບຂອງ" },
-  { value: "lost", label: "ຂອງສູນຫາຍ" },
-  { value: "handover", label: "ຈຸດສົ່ງມອບ" },
-];
+
 
 export function MasterDataPage({
   campusLocations,
@@ -26,6 +21,7 @@ export function MasterDataPage({
   itemCategories,
   loading,
   members = [],
+  onDeleteMember,
   onReload,
   onRemoveCategory,
   onRemoveDepartment,
@@ -38,7 +34,6 @@ export function MasterDataPage({
   onToggleDepartmentActive,
   onToggleLocationActive,
   onToggleMemberActive,
-  onUpdateMemberIdentityStatus,
   saving,
 }) {
   const [activeTab, setActiveTab] = useState("categories");
@@ -48,7 +43,6 @@ export function MasterDataPage({
     name: "",
     building: "",
     floor: "",
-    locationType: "both",
     detail: "",
     isActive: true,
   });
@@ -68,7 +62,6 @@ export function MasterDataPage({
       name: "",
       building: "",
       floor: "",
-      locationType: "both",
       detail: "",
       isActive: true,
     });
@@ -95,7 +88,6 @@ export function MasterDataPage({
       name: item.nameTh || item.name,
       building: item.building || "",
       floor: item.floor || "",
-      locationType: item.locationType || "both",
       detail: item.detail || "",
       isActive: item.isActive,
     });
@@ -187,9 +179,9 @@ export function MasterDataPage({
           departmentOptions={departmentList.filter((item) => item.isActive).map((item) => item.name)}
           loading={loading}
           members={members}
+          onDeleteMember={onDeleteMember}
           onSaveMember={onSaveMember}
           onToggleActive={onToggleMemberActive}
-          onUpdateIdentityStatus={onUpdateMemberIdentityStatus}
           saving={saving}
         />
       ) : (
@@ -250,21 +242,7 @@ export function MasterDataPage({
                 onChange={(value) => setLocationForm((current) => ({ ...current, floor: value }))}
                 value={locationForm.floor}
               />
-              <label className="field">
-                <span>ປະເພດສະຖານທີ່</span>
-                <select
-                  onChange={(event) =>
-                    setLocationForm((current) => ({ ...current, locationType: event.target.value }))
-                  }
-                  value={locationForm.locationType}
-                >
-                  {LOCATION_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+
               <TextInput
                 label="ລາຍລະອຽດເພີ່ມເຕີມ"
                 onChange={(value) => setLocationForm((current) => ({ ...current, detail: value }))}
@@ -369,10 +347,7 @@ export function MasterDataPage({
                     {joinDetail(item.building, item.floor ? `ຊັ້ນ ${item.floor}` : "")}
                     {item.detail ? ` · ${item.detail}` : ""}
                   </p>
-                  <small>
-                    {LOCATION_TYPE_OPTIONS.find((option) => option.value === item.locationType)?.label ||
-                      item.locationType}
-                  </small>
+
                 </div>
                 <div className="master-data-row-actions">
                   <button className="outline-button" onClick={() => startEditLocation(item)} type="button">

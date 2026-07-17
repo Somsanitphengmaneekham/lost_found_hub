@@ -8,11 +8,12 @@ import {
   Save,
   Search,
   ShieldCheck,
+  Trash2,
   UserCog,
   UserPlus,
 } from "lucide-react";
 import { FormGrid, TextInput } from "../common/FormControls.jsx";
-import { identityStatusLabel, normalizeText, roleLabel } from "../../utils/ui.js";
+import { normalizeText, roleLabel } from "../../utils/ui.js";
 
 const emptyTeacherForm = {
   role: "teacher",
@@ -27,12 +28,6 @@ const emptyTeacherForm = {
   employeeCode: "",
 };
 
-function statusTone(status) {
-  if (status === "verified") return "green";
-  if (status === "rejected") return "red";
-  return "amber";
-}
-
 function memberFullName(member) {
   return member.fullName || [member.firstName, member.lastName].filter(Boolean).join(" ");
 }
@@ -42,9 +37,9 @@ export function UserManagementPanel({
   departmentOptions,
   loading,
   members,
+  onDeleteMember,
   onSaveMember,
   onToggleActive,
-  onUpdateIdentityStatus,
   saving,
 }) {
   const [editingId, setEditingId] = useState(null);
@@ -81,6 +76,7 @@ export function UserManagementPanel({
   }
 
   function startEdit(member) {
+    if (member.role !== "teacher") return;
     setEditingId(member.id);
     setMemberForm({
       role: member.role,
@@ -100,6 +96,13 @@ export function UserManagementPanel({
     event.preventDefault();
     const saved = await onSaveMember({ id: editingId, ...memberForm });
     if (saved) resetForm();
+  }
+
+  function confirmDelete(member) {
+    const confirmed = window.confirm(
+      `ຕ້ອງການລຶບບັນຊີ ${memberFullName(member) || member.username} ຖາວອນບໍ?`,
+    );
+    if (confirmed) onDeleteMember(member);
   }
 
   const isEditing = Boolean(editingId);
@@ -125,7 +128,8 @@ export function UserManagementPanel({
         <div className="user-management-note">
           <ShieldCheck size={18} />
           <p>
-            ນັກສຶກສາສະໝັກຜ່ານໜ້າ Register ສ່ວນອາຈານ/ຫ້ອງຄຸ້ມຄອງໃຫ້ສ້າງຈາກໜ້ານີ້ເທົ່ານັ້ນ.
+            ນັກສຶກສາສະໝັກແລ້ວໃຊ້ງານໄດ້ທັນທີ. ອາຈານເບິ່ງຂໍ້ມູນ, ປິດໃຊ້ງານ ຫຼື
+            ລຶບບັນຊີນັກສຶກສາໄດ້ ແຕ່ບໍ່ສາມາດແກ້ໄຂຂໍ້ມູນ.
           </p>
         </div>
 
@@ -189,21 +193,12 @@ export function UserManagementPanel({
               ))}
             </select>
           </label>
-          {editingRole === "student" ? (
-            <TextInput
-              label="ລະຫັດນັກສຶກສາ"
-              onChange={(value) => setMemberForm((current) => ({ ...current, studentCode: value }))}
-              required
-              value={memberForm.studentCode}
-            />
-          ) : (
-            <TextInput
-              label="ລະຫັດພະນັກງານ/ອາຈານ"
-              onChange={(value) => setMemberForm((current) => ({ ...current, employeeCode: value }))}
-              required
-              value={memberForm.employeeCode}
-            />
-          )}
+          <TextInput
+            label="ລະຫັດພະນັກງານ/ອາຈານ"
+            onChange={(value) => setMemberForm((current) => ({ ...current, employeeCode: value }))}
+            required
+            value={memberForm.employeeCode}
+          />
         </FormGrid>
 
         <div className="master-data-form-actions">
@@ -271,9 +266,6 @@ export function UserManagementPanel({
                   <span className={`status-chip ${member.isActive ? "green" : "red"}`}>
                     {member.isActive ? "ໃຊ້ງານ" : "ປິດໃຊ້ງານ"}
                   </span>
-                  <span className={`status-chip ${statusTone(member.identityStatus)}`}>
-                    {identityStatusLabel(member.identityStatus)}
-                  </span>
                 </div>
                 <h4>{memberFullName(member) || member.username}</h4>
                 <p>
@@ -287,10 +279,12 @@ export function UserManagementPanel({
                 </small>
               </div>
               <div className="master-data-row-actions member-actions">
-                <button className="outline-button" onClick={() => startEdit(member)} type="button">
-                  <Pencil size={16} />
-                  ແກ້ໄຂ
-                </button>
+                {member.role === "teacher" && (
+                  <button className="outline-button" onClick={() => startEdit(member)} type="button">
+                    <Pencil size={16} />
+                    ແກ້ໄຂ
+                  </button>
+                )}
                 <button
                   className="outline-button"
                   disabled={isSelf}
@@ -302,24 +296,10 @@ export function UserManagementPanel({
                   {member.isActive ? "ປິດໃຊ້ງານ" : "ເປີດໃຊ້ງານ"}
                 </button>
                 {member.role === "student" && (
-                  <>
-                    <button
-                      className="outline-button"
-                      onClick={() => onUpdateIdentityStatus(member, "verified")}
-                      type="button"
-                    >
-                      <BadgeCheck size={16} />
-                      ຢືນຢັນ
-                    </button>
-                    <button
-                      className="reject-button"
-                      onClick={() => onUpdateIdentityStatus(member, "rejected")}
-                      type="button"
-                    >
-                      <Ban size={16} />
-                      ປະຕິເສດບັດ
-                    </button>
-                  </>
+                  <button className="reject-button" onClick={() => confirmDelete(member)} type="button">
+                    <Trash2 size={16} />
+                    ລຶບບັນຊີ
+                  </button>
                 )}
               </div>
             </article>

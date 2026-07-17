@@ -1,4 +1,4 @@
-import { ArrowRight, Bell, CheckCircle2, Clock3, ShieldCheck, UserCircle } from "lucide-react";
+import { ArrowRight, Bell, CheckCircle2, Clock3 } from "lucide-react";
 import { EmptyState } from "../components/common/FormControls.jsx";
 import { formatLaoDateTime } from "../utils/ui.js";
 
@@ -6,16 +6,12 @@ const audienceCopy = {
   teacher: {
     eyebrow: "ແຈ້ງເຕືອນອາຈານ",
     title: "ແຈ້ງເຕືອນສຳລັບອາຈານ",
-    description: "ສະແດງວຽກທີ່ຕ້ອງກວດ, ລາຍການລໍຖ້າອະນຸມັດ, Match ແລະ ການຢືນຢັນນັກສຶກສາ",
-    privateLabel: "ສະເພາະອາຈານ",
-    privateIcon: ShieldCheck,
+    description: "ສະແດງວຽກທີ່ຕ້ອງກວດ, ລາຍການລໍຖ້າອະນຸມັດ, Match ແລະ ການຄືນຂອງ",
   },
   student: {
     eyebrow: "ແຈ້ງເຕືອນນັກສຶກສາ",
     title: "ແຈ້ງເຕືອນສຳລັບນັກສຶກສາ",
-    description: "ສະແດງສະຖານະລາຍການທີ່ທ່ານແຈ້ງໄວ້, Match ທີ່ອາດກົງກັນ ແລະ ສະຖານະຢືນຢັນຕົວຕົນ",
-    privateLabel: "ສະເພາະນັກສຶກສາ",
-    privateIcon: UserCircle,
+    description: "ສະແດງສະຖານະລາຍການທີ່ທ່ານແຈ້ງໄວ້, Match ທີ່ອາດກົງກັນ ແລະ ການຄືນຂອງ",
   },
 };
 
@@ -30,7 +26,6 @@ function notificationStats(notifications) {
 export function NotificationsPage({ currentUser, notifications }) {
   const audience = currentUser.role === "teacher" ? "teacher" : "student";
   const copy = audienceCopy[audience];
-  const PrivateIcon = copy.privateIcon;
   const stats = notificationStats(notifications);
 
   return (
@@ -40,11 +35,6 @@ export function NotificationsPage({ currentUser, notifications }) {
           <span className="notifications-eyebrow">{copy.eyebrow}</span>
           <h2 id="notifications-title">{copy.title}</h2>
           <p>{copy.description}</p>
-        </div>
-        <div className="notifications-private-card">
-          <PrivateIcon size={22} />
-          <strong>{copy.privateLabel}</strong>
-          <span>ລະບົບຈະສະແດງສະເພາະຂໍ້ມູນທີ່ກ່ຽວກັບ role ຂອງຜູ້ໃຊ້</span>
         </div>
       </div>
 
@@ -72,11 +62,11 @@ export function NotificationsPage({ currentUser, notifications }) {
           <h3>ແຍກແຈ້ງເຕືອນຕາມຜູ້ໃຊ້</h3>
           <div>
             <strong>ອາຈານ</strong>
-            <span>ອະນຸມັດສີ່ງຂອງທີ່ພົບ, ຢືນຢັນ Match, ຢືນຢັນນັກສຶກສາ, ຄືນຂອງ</span>
+            <span>ອະນຸມັດປະກາດຂອງສູນຫາຍ/ຂອງທີ່ພົບ ແລະ ຕິດຕາມການຄືນຂອງ</span>
           </div>
           <div>
             <strong>ນັກສຶກສາ</strong>
-            <span>ສະຖານະການປະກາດສີ່ງຂອງ, ລາຍການທີ່ອາດກົງກັນ, ຜົນຢືນຢັນຕົວຕົນ</span>
+            <span>ສະຖານະການປະກາດສິ່ງຂອງ, ລາຍການທີ່ອາດກົງກັນ ແລະ ການຄືນຂອງ</span>
           </div>
         </aside>
       </div>

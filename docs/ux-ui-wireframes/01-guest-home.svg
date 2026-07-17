@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#14323b" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="900" fill="#f5fafb"/>
+  <rect x="20" y="20" width="1160" height="860" rx="0" fill="#ffffff" stroke="#183946" stroke-width="2"/>
+<rect x="40" y="30" width="1120" height="80" rx="0" fill="#24564f" stroke="#24564f" stroke-width="2"/>
+<text x="68" y="72" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="25" font-weight="900" fill="#ffffff">Lost and Found</text>
+<text x="68" y="98" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#d5e4e6">01. Guest Home / ໜ້າຫຼັກກ່ອນ Login · #home</text>
+<text x="430" y="82" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="13" font-weight="800" fill="#ffffff">Home</text>
+<line x1="402" y1="95" x2="458" y2="95" stroke="#9cffb0" stroke-width="4"/>
+<rect x="986" y="44" width="78" height="34" rx="4" fill="#3d6965" stroke="#a7c5c8" stroke-width="2"/>
+<text x="1025" y="67" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="#ffffff">Login</text>
+<rect x="1075" y="44" width="92" height="34" rx="4" fill="#d7f5e9" stroke="#d7f5e9" stroke-width="2"/>
+<text x="1121" y="67" text-anchor="middle" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="#14323b">Register</text>
+  <g filter="url(#shadow)">
+    <rect x="60" y="135" width="1080" height="250" rx="4" fill="#eef7f8" stroke="#183946" stroke-width="2"/>
+<text x="78" y="169" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">Hero section</text>
+<text x="82" y="201" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Faculty image background</text>
+<text x="82" y="225" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Website title + short intro</text>
+<text x="82" y="249" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Primary buttons: Report Found / Report Lost</text>
+<rect x="130" y="355" width="940" height="72" rx="4" fill="#ffffff" stroke="#183946" stroke-width="2"/>
+<text x="148" y="389" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">Search + Filter bar</text>
+<text x="152" y="421" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Keyword search</text>
+<rect x="60" y="465" width="690" height="260" rx="4" fill="#ffffff" stroke="#183946" stroke-width="2"/>
+<text x="78" y="499" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">Latest public announcements</text>
+<text x="82" y="531" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Approved found posts</text>
+<text x="82" y="555" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Published lost posts</text>
+<text x="82" y="579" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• Item card grid: image, title, location,</text>
+<text x="82" y="603" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• date, status, detail button</text>
+<rect x="780" y="465" width="360" height="260" rx="4" fill="#e7f7ef" stroke="#183946" stroke-width="2"/>
+<text x="798" y="499" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">Short usage guide for new users</text>
+<text x="802" y="531" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• 1. Register / Login</text>
+<text x="802" y="555" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• 2. Report lost or</text>
+<text x="802" y="579" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• found item</text>
+<text x="802" y="603" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• 3. Teacher verifies</text>
+<text x="802" y="627" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="15" font-weight="500" fill="#5b7078">• 4. Follow notification</text>
+<rect x="60" y="755" width="1080" height="70" rx="4" fill="#f4f7f8" stroke="#183946" stroke-width="2"/>
+<text x="78" y="789" text-anchor="start" font-family="Noto Sans Lao, Segoe UI, Arial, sans-serif" font-size="18" font-weight="800" fill="#14323b">Footer</text>
+  </g>
+</svg>

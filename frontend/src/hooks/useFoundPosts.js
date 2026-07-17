@@ -5,6 +5,7 @@ import {
   deleteFoundPost,
   moveFoundToApproval,
   rejectFoundPost,
+  returnFoundPost,
   updateFoundPost,
   uploadPostImages,
 } from "../api/posts.js";
@@ -207,11 +208,29 @@ export function useFoundPosts({ currentUser, foundItems, loadAppData, categoryFo
   async function rejectFoundItem(id) {
     setAppSaving(true);
     try {
-      await rejectFoundPost(id);
+      await rejectFoundPost(id, currentUser.id);
       await loadAppData();
       setToast("ປະຕິເສດລາຍການແລ້ວ ເກັບໄວ້ກວດສອບຍ້ອນຫຼັງ");
     } catch (error) {
       setToast(error.message || "ປະຕິເສດລາຍການບໍ່ສຳເລັດ");
+    } finally {
+      setAppSaving(false);
+    }
+  }
+
+  async function returnFoundItem(id, receivedByMemberId) {
+    setAppSaving(true);
+    try {
+      await returnFoundPost(id, {
+        returnedByMemberId: currentUser.id,
+        receivedByMemberId,
+        note: "ຄືນສິ່ງຂອງທີ່ຫ້ອງຄຸ້ມຄອງ",
+      });
+      await loadAppData();
+      setToast("ບັນທຶກການສົ່ງຄືນເຈົ້າຂອງແລ້ວ");
+    } catch (error) {
+      setToast(error.message || "ບັນທຶກການສົ່ງຄືນບໍ່ສຳເລັດ");
+      throw error;
     } finally {
       setAppSaving(false);
     }
@@ -229,5 +248,6 @@ export function useFoundPosts({ currentUser, foundItems, loadAppData, categoryFo
     moveToApproval,
     approveFoundItem,
     rejectFoundItem,
+    returnFoundItem,
   };
 }

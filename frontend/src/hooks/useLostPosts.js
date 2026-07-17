@@ -63,7 +63,14 @@ function contactChannelFromUser(user) {
   return user?.phone || user?.email || user?.username || "";
 }
 
-export function useLostPosts({ currentUser, lostReports, loadAppData, categoryFormOptions, setToast }) {
+export function useLostPosts({
+  currentUser,
+  lostReports,
+  loadAppData,
+  categoryFormOptions,
+  navigateToPage,
+  setToast,
+}) {
   const [lostForm, setLostForm] = useState(lostInitial);
   const [editingLostId, setEditingLostId] = useState(null);
   const [lostSaving, setLostSaving] = useState(false);
@@ -115,13 +122,19 @@ export function useLostPosts({ currentUser, lostReports, loadAppData, categoryFo
         });
         setToast("ບັນທຶກການແກ້ໄຂຂໍ້ມູນຂອງສູນຫາຍໃນຖານຂໍ້ມູນແລ້ວ");
       } else {
-        await createLostPost(payload);
-        setToast("ສົ່ງຂໍ້ມູນຂອງສູນຫາຍແລ້ວ ລາຍການຈະສະແດງຫຼັງອາຈານອະນຸມັດ");
+        const result = await createLostPost(payload);
+        const matchCount = Number(result?.matchCount ?? 0);
+        setToast(
+          matchCount > 0
+            ? `ສົ່ງປະກາດແລ້ວ ລະບົບພົບລາຍການທີ່ອາດກົງກັນ ${matchCount} ລາຍການ`
+            : "ສົ່ງປະກາດແລ້ວ ຍັງບໍ່ພົບລາຍການທີ່ຄ້າຍກັນເກີນ 70%",
+        );
       }
 
       await loadAppData();
       setEditingLostId(null);
       setLostForm(lostInitial);
+      navigateToPage?.("matching");
     } catch (error) {
       setToast(error.message || "ບັນທຶກຂໍ້ມູນຂອງສູນຫາຍບໍ່ສຳເລັດ");
     } finally {
@@ -205,7 +218,7 @@ export function useLostPosts({ currentUser, lostReports, loadAppData, categoryFo
   async function rejectLostItem(id) {
     setLostSaving(true);
     try {
-      await rejectLostPost(id);
+      await rejectLostPost(id, currentUser.id);
       await loadAppData();
       setToast("ປະຕິເສດປະກາດຂອງສູນຫາຍແລ້ວ ເກັບໄວ້ກວດສອບຍ້ອນຫຼັງ");
     } catch (error) {

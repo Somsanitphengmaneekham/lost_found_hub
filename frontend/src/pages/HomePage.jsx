@@ -116,7 +116,7 @@ const guestGuideSteps = [
   {
     icon: UserPlus,
     title: "ສະໝັກສະມາຊິກ",
-    description: "ນັກສຶກສາລົງທະບຽນ ແລະ ອັບໂຫຼດຮູບບັດນັກສຶກສາເພື່ອຢືນຢັນຕົວຕົນ.",
+    description: "ນັກສຶກສາລົງທະບຽນ ແລະ ອັບໂຫຼດຮູບບັດນັກສຶກສາແລ້ວເຂົ້າໃຊ້ງານໄດ້ທັນທີ.",
   },
   {
     icon: FileQuestion,
@@ -151,7 +151,6 @@ function GuestHowToUse() {
       <div className="how-to-grid">
         {guestGuideSteps.map((step, index) => {
           const Icon = step.icon;
-
           return (
             <article className="how-to-card" key={step.title}>
               <div className="how-to-number">{index + 1}</div>
@@ -263,7 +262,7 @@ function Announcements({ announcementItems, canReview, isAuthenticated, onSelect
           <h2 id="announcement-title">ລາຍການປະກາດຫຼ້າສຸດ</h2>
           <p>ອັບເດດແບບຣຽວໄທມ໌ຈາກພາຍໃນຄະນະ</p>
         </div>
-        <a href={canReview ? "#review" : "#dashboard"}>ເບິ່ງທັງໝົດ</a>
+        <a href={canReview ? "#approval" : "#dashboard"}>ເບິ່ງທັງໝົດ</a>
       </div>
       <div className="recent-grid">
         {announcementItems.length ? (

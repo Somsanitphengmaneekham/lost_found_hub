@@ -206,7 +206,7 @@ function publicMember(member) {
   return {
     ...safeMember,
     isActive: member.isActive ?? true,
-    identityStatus: member.identityStatus ?? (member.role === "teacher" ? "verified" : "pending"),
+    identityStatus: member.identityStatus ?? "verified",
     fullName: `${member.firstName} ${member.lastName}`,
     avatarUrl: member.avatarUrl ?? "",
   };
@@ -522,6 +522,9 @@ function upsertMatch(state, lost, found) {
 
 function generateMatchesForLost(state, lost) {
   let count = 0;
+  state.matches = state.matches.filter(
+    (match) => match.lostPostId !== lost.id || match.status !== "suggested",
+  );
   state.foundPosts
     .filter((found) => !found.deletedAt && found.status === "approved" && found.category === lost.category)
     .forEach((found) => {
@@ -612,7 +615,7 @@ export function localRegister(body) {
     email,
     phone: normalize(body.phone),
     department: body.department || state.departments[0]?.name || "",
-    identityStatus: "pending",
+    identityStatus: "verified",
     cardImageUrl: body.cardImageUrl,
     avatarUrl: "",
     isActive: true,
@@ -687,6 +690,12 @@ export function localCreateTeacherMember(body) {
 export function localUpdateMember(id, body) {
   const state = readState();
   const member = findById(state.members, id, "ສະມາຊິກ");
+  if (member.role === "student") {
+    throw localError(
+      "ອາຈານບໍ່ສາມາດແກ້ໄຂຂໍ້ມູນນັກສຶກສາ ສາມາດປິດໃຊ້ງານ ຫຼື ລຶບບັນຊີເທົ່ານັ້ນ",
+      403,
+    );
+  }
   const username = normalize(body.username);
   const email = normalize(body.email);
   const studentCode = normalize(body.studentCode);
@@ -751,16 +760,33 @@ export function localUpdateMemberActiveStatus(id, isActive, actorId) {
   return publicMember(member);
 }
 
-export function localUpdateMemberIdentityStatus(id, identityStatus) {
-  if (!["pending", "verified", "rejected"].includes(identityStatus)) {
-    throw localError("ສະຖານະຢືນຢັນຕົວຕົນບໍ່ຖືກຕ້ອງ", 400);
+export function localDeleteMember(id, actorId) {
+  if (Number(id) === Number(actorId)) {
+    throw localError("ບໍ່ສາມາດລຶບບັນຊີທີ່ກຳລັງໃຊ້ງານຢູ່", 400);
   }
 
   const state = readState();
   const member = findById(state.members, id, "ສະມາຊິກ");
-  member.identityStatus = identityStatus;
+  if (member.role !== "student") {
+    throw localError("ໜ້ານີ້ອະນຸຍາດໃຫ້ລຶບສະເພາະບັນຊີນັກສຶກສາ", 403);
+  }
+
+  const hasRelatedData =
+    state.lostPosts.some((item) => Number(item.ownerId) === Number(id)) ||
+    state.foundPosts.some((item) => Number(item.finderId) === Number(id)) ||
+    state.returnRecords.some(
+      (item) => Number(item.returnedBy) === Number(id) || Number(item.receivedBy) === Number(id),
+    );
+
+  if (hasRelatedData) {
+    throw localError(
+      "ບັນຊີນີ້ມີປະຫວັດປະກາດ ຫຼື ທຸລະກຳແລ້ວ ກະລຸນາໃຊ້ປິດໃຊ້ງານແທນການລຶບ",
+      409,
+    );
+  }
+
+  state.members = state.members.filter((item) => Number(item.id) !== Number(id));
   writeState(state);
-  return publicMember(member);
 }
 
 export function localUpdateProfile(id, body) {
@@ -775,7 +801,7 @@ export function localUpdateProfile(id, body) {
     department: body.department !== undefined ? body.department : member.department,
     studentCode: body.studentCode !== undefined ? normalize(body.studentCode) : member.studentCode,
     employeeCode: body.employeeCode !== undefined ? normalize(body.employeeCode) : member.employeeCode,
-    identityStatus: body.identityStatus !== undefined ? normalize(body.identityStatus) : member.identityStatus,
+    identityStatus: member.identityStatus ?? "verified",
     cardImageUrl: body.cardImageUrl !== undefined ? normalize(body.cardImageUrl) : member.cardImageUrl,
     avatarUrl: body.avatarUrl !== undefined ? normalize(body.avatarUrl) : member.avatarUrl,
   };
@@ -1048,7 +1074,7 @@ export function localCreateLostPost(body) {
     images: imagesFromUrls(body.imageUrls),
   };
   state.lostPosts.push(row);
-  const matchCount = row.status === "published" ? generateMatchesForLost(state, row) : 0;
+  const matchCount = generateMatchesForLost(state, row);
   writeState(state);
   return { ...lostRows(state).find((item) => item.id === row.id), matchCount };
 }
@@ -1074,7 +1100,7 @@ export function localUpdateLostPost(id, body) {
     status: body.status ?? item.status,
     images: body.imageUrls !== undefined ? imagesFromUrls(body.imageUrls) : item.images,
   });
-  if (item.status === "published") generateMatchesForLost(state, item);
+  generateMatchesForLost(state, item);
   writeState(state);
   return lostRows(state).find((row) => row.id === item.id);
 }
@@ -1157,4 +1183,45 @@ export function localReturnMatchedItem(id, body) {
   match.status = "confirmed";
   writeState(state);
   return record;
+}
+
+export function localReturnFoundPost(id, body) {
+  const state = readState();
+  const found = findById(state.foundPosts, id, "ປະກາດພົບຂອງ");
+  const teacher = activeActorById(state, body.returnedByMemberId);
+  const receiver = memberById(state, body.receivedByMemberId);
+
+  if (teacher.role !== "teacher") throw localError("returning items requires an active teacher account", 403);
+  if (!receiver || receiver.role !== "student" || receiver.isActive === false) {
+    throw localError("ກະລຸນາເລືອກນັກສຶກສາຜູ້ຮັບຄືນທີ່ຍັງເປີດໃຊ້ງານ", 400);
+  }
+  if (!["approved", "matched"].includes(found.status)) {
+    throw localError("ສາມາດບັນທຶກການຄືນໄດ້ສະເພາະລາຍການທີ່ອະນຸມັດແລ້ວ", 409);
+  }
+
+  const matchingRow = state.matches
+    .filter((match) => Number(match.foundPostId) === Number(found.id))
+    .map((match) => ({
+      match,
+      lost: state.lostPosts.find((lost) => Number(lost.id) === Number(match.lostPostId)),
+    }))
+    .filter(({ lost }) => Number(lost?.ownerId) === Number(receiver.id))
+    .sort((left, right) => Number(right.match.matchScore) - Number(left.match.matchScore))[0];
+
+  const recordId = state.nextIds.returnRecords++;
+  const record = {
+    id: recordId,
+    claimRequestId: `CR-DIRECT-${recordId}`,
+    foundPostId: found.id,
+    returnedBy: teacher.username,
+    receivedBy: receiver.username,
+    returnLocation: "ຫ້ອງຄຸ້ມຄອງ",
+    returnedAt: new Date().toISOString(),
+  };
+
+  state.returnRecords.unshift(record);
+  found.status = "returned";
+  if (matchingRow?.lost) matchingRow.lost.status = "closed";
+  writeState(state);
+  return { post: foundRows(state).find((item) => item.id === found.id), returnRecord: record };
 }

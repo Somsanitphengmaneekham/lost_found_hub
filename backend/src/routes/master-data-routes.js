@@ -94,15 +94,14 @@ export function registerMasterDataRoutes(app, pool) {
 
       const [result] = await pool.execute(
         `
-          INSERT INTO locations (name_th, building, floor, detail, location_type, is_active)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT INTO locations (name_th, building, floor, detail, is_active)
+          VALUES (?, ?, ?, ?, ?)
         `,
         [
           nameTh,
           building,
           floor,
           req.body.detail?.trim() || null,
-          req.body.locationType ?? "both",
           boolToDb(req.body.isActive ?? true),
         ],
       );
@@ -356,7 +355,6 @@ function mapLocationRow(row) {
     nameTh: row.name_th,
     building: row.building ?? "",
     floor: row.floor ?? "",
-    locationType: row.location_type,
     detail: row.detail ?? "",
     isActive: Boolean(row.is_active),
   };
@@ -425,10 +423,6 @@ function buildLocationUpdate(body) {
     values.push(body.detail?.trim() || null);
   }
 
-  if (body.locationType !== undefined) {
-    fields.push("location_type = ?");
-    values.push(body.locationType);
-  }
 
   if (body.isActive !== undefined) {
     fields.push("is_active = ?");

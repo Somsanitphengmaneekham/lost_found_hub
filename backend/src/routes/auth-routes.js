@@ -1,9 +1,15 @@
 import crypto from "node:crypto";
 import { resolveDepartmentId } from "../services/lookups.js";
-import { assertAllowedStoredImageUrl, mapMysqlError, normalizeText, requireFields } from "../utils/shared.js";
+import { deliverPasswordResetOtp } from "../services/otp-delivery.js";
+import { mapMysqlError, normalizeText, requireFields } from "../utils/shared.js";
 
 const PASSWORD_HASH_PREFIX = "scrypt$";
-const MEMBER_IMAGE_MAX_LENGTH = 260_000;
+const PASSWORD_RESET_OTP_TTL_MINUTES = Number(process.env.PASSWORD_RESET_OTP_MINUTES ?? 10);
+const PASSWORD_RESET_TOKEN_TTL_MINUTES = Number(process.env.PASSWORD_RESET_TOKEN_MINUTES ?? 15);
+const PASSWORD_RESET_MAX_ATTEMPTS = Number(process.env.PASSWORD_RESET_MAX_ATTEMPTS ?? 5);
+const REMOTE_IMAGE_URL_PATTERN = /^https?:\/\/[^\s<>"']+$/i;
+const LOCAL_UPLOAD_URL_PATTERN = /^\/api\/uploads\/images\/[A-Za-z0-9._~!$&'()*+,;=:@/-]+$/;
+let passwordResetTablePromise = null;
 
 function safeTextEqual(left, right) {
   const leftBuffer = Buffer.from(String(left ?? ""));
@@ -33,23 +39,22 @@ function shouldUpgradePassword(storedPassword) {
   return !String(storedPassword ?? "").startsWith(PASSWORD_HASH_PREFIX);
 }
 
-// Fix 3: รับเฉพาะ HTTPS URL — ปฏิเสธ Base64 data URLs
 function requireUploadedImage(value, message) {
   const url = String(value ?? "").trim();
   if (!url) {
-    const error = new Error(message || "ກະລຸນາໃສ່ລິ້ງ URL ຮູບພາບ");
+    const error = new Error(message || "ກະລຸນາອັບໂຫຼດຮູບພາບ");
     error.statusCode = 400;
     throw error;
   }
 
   if (url.startsWith("data:image/")) {
-    const error = new Error("ກະລຸນາໃຊ້ລິ້ງ URL ຮູບພາບ (https://...) ແທນການ upload ໄຟລ໌ Base64 ໂດຍກົງ");
+    const error = new Error("ກະລຸນາອັບໂຫຼດເປັນໄຟລ໌ຮູບພາບ ບໍ່ໃຫ້ສົ່ງ Base64 ໂດຍກົງ");
     error.statusCode = 400;
     throw error;
   }
 
-  if (!url.startsWith("https://") && !url.startsWith("http://")) {
-    const error = new Error("ລິ້ງ URL ຮູບພາບຕ້ອງເລີ່ມດ້ວຍ https:// ຫຼື http://");
+  if (url.includes("..") || (!LOCAL_UPLOAD_URL_PATTERN.test(url) && !REMOTE_IMAGE_URL_PATTERN.test(url))) {
+    const error = new Error("ຮູບຕ້ອງມາຈາກການອັບໂຫຼດໃນລະບົບ ຫຼື URL ຮູບພາບທີ່ຖືກຕ້ອງ");
     error.statusCode = 400;
     throw error;
   }
@@ -117,11 +122,103 @@ async function queryMemberById(pool, id) {
   return rows[0] ? mapMember(rows[0]) : null;
 }
 
-function assertIdentityStatus(status) {
-  if (!["pending", "verified", "rejected"].includes(status)) {
-    const error = new Error("ສະຖານະຢືນຢັນຕົວຕົນບໍ່ຖືກຕ້ອງ");
-    error.statusCode = 400;
-    throw error;
+function httpError(message, statusCode = 400) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function normalizePasswordResetChannel(value) {
+  const channel = normalizeText(value || "email");
+  if (channel === "email") return channel;
+  throw httpError("ລະບົບຮອງຮັບ OTP ຜ່ານອີເມວເທົ່ານັ້ນ");
+}
+
+function createNumericOtp() {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+function digestResetToken(token) {
+  return crypto.createHash("sha256").update(String(token)).digest("hex");
+}
+
+function maskEmail(destination) {
+  const value = String(destination ?? "");
+  const [name, domain] = value.split("@");
+  if (!domain) return value;
+  const visibleName = name.length <= 2 ? `${name[0] ?? "*"}*` : `${name.slice(0, 2)}***`;
+  return `${visibleName}@${domain}`;
+}
+
+function ensurePasswordResetTable(pool) {
+  if (!passwordResetTablePromise) {
+    passwordResetTablePromise = pool.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_otps (
+        id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        member_id INT UNSIGNED NOT NULL,
+        channel ENUM('email') NOT NULL,
+        destination VARCHAR(190) NOT NULL,
+        otp_hash VARCHAR(255) NOT NULL,
+        expires_at DATETIME NOT NULL,
+        attempt_count TINYINT UNSIGNED NOT NULL DEFAULT 0,
+        verified_at DATETIME NULL,
+        reset_token_digest VARCHAR(64) NULL,
+        reset_token_expires_at DATETIME NULL,
+        consumed_at DATETIME NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_password_reset_member_id (member_id),
+        KEY idx_password_reset_destination (destination),
+        KEY idx_password_reset_expires_at (expires_at),
+        KEY idx_password_reset_token_digest (reset_token_digest),
+        CONSTRAINT fk_password_reset_member
+          FOREIGN KEY (member_id) REFERENCES members(id)
+          ON UPDATE CASCADE ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  }
+
+  return passwordResetTablePromise;
+}
+
+async function queryPasswordResetMember(pool, identifier) {
+  const [rows] = await pool.execute(
+    `
+      SELECT id, username, email, is_active
+      FROM members
+      WHERE is_active = 1
+        AND (username = ? OR email = ?)
+      LIMIT 1
+    `,
+    [identifier, identifier],
+  );
+
+  return rows[0] ?? null;
+}
+
+async function getPasswordResetTarget(pool, body) {
+  const identifier = normalizeText(body.identifier);
+  if (!identifier) throw httpError("ກະລຸນາລະບຸຊື່ຜູ້ໃຊ້ ຫຼື ອີເມວ");
+
+  const channel = normalizePasswordResetChannel(body.channel);
+  const member = await queryPasswordResetMember(pool, identifier);
+  if (!member) throw httpError("ບໍ່ພົບບັນຊີນີ້", 404);
+
+  const destination = normalizeText(member.email);
+  if (!destination) {
+    throw httpError("ບັນຊີນີ້ຍັງບໍ່ມີອີເມວ");
+  }
+
+  return { member, channel, destination };
+}
+
+function assertUsableResetOtp(row) {
+  if (!row) throw httpError("OTP ບໍ່ຖືກຕ້ອງ ຫຼື ໝົດອາຍຸ");
+  if (new Date(row.expires_at).getTime() < Date.now()) {
+    throw httpError("OTP ໝົດອາຍຸແລ້ວ ກະລຸນາຂໍ OTP ໃໝ່");
+  }
+  if (Number(row.attempt_count) >= PASSWORD_RESET_MAX_ATTEMPTS) {
+    throw httpError("ກວດສອບ OTP ຫຼາຍເກີນໄປ ກະລຸນາຂໍ OTP ໃໝ່", 429);
   }
 }
 
@@ -203,6 +300,184 @@ export function registerAuthRoutes(app, pool) {
     }
   });
 
+  app.post("/api/auth/password-reset/request", async (req, res, next) => {
+    try {
+      await ensurePasswordResetTable(pool);
+
+      const { member, channel, destination } = await getPasswordResetTarget(pool, req.body);
+      const otp = createNumericOtp();
+      const expiresAt = new Date(Date.now() + PASSWORD_RESET_OTP_TTL_MINUTES * 60_000);
+
+      await pool.execute(
+        `
+          UPDATE password_reset_otps
+          SET consumed_at = COALESCE(consumed_at, CURRENT_TIMESTAMP)
+          WHERE member_id = ?
+            AND channel = ?
+            AND consumed_at IS NULL
+        `,
+        [member.id, channel],
+      );
+
+      await pool.execute(
+        `
+          INSERT INTO password_reset_otps (
+            member_id,
+            channel,
+            destination,
+            otp_hash,
+            expires_at
+          ) VALUES (?, ?, ?, ?, ?)
+        `,
+        [member.id, channel, destination, hashPassword(otp), expiresAt],
+      );
+
+      const delivery = await deliverPasswordResetOtp({
+        destination,
+        otp,
+        expiresInMinutes: PASSWORD_RESET_OTP_TTL_MINUTES,
+      });
+
+      const response = {
+        ok: true,
+        channel,
+        destination: maskEmail(destination),
+        deliveryMode: delivery.mode,
+        expiresInMinutes: PASSWORD_RESET_OTP_TTL_MINUTES,
+      };
+
+      if (delivery.debugOtp) response.debugOtp = delivery.debugOtp;
+
+      return res.status(201).json(response);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.post("/api/auth/password-reset/verify", async (req, res, next) => {
+    try {
+      await ensurePasswordResetTable(pool);
+
+      const otp = normalizeText(req.body.otp);
+      if (!otp) throw httpError("ກະລຸນາກອກ OTP");
+
+      const { member, channel, destination } = await getPasswordResetTarget(pool, req.body);
+      const [rows] = await pool.execute(
+        `
+          SELECT *
+          FROM password_reset_otps
+          WHERE member_id = ?
+            AND channel = ?
+            AND destination = ?
+            AND consumed_at IS NULL
+          ORDER BY id DESC
+          LIMIT 1
+        `,
+        [member.id, channel, destination],
+      );
+      const resetRequest = rows[0];
+
+      assertUsableResetOtp(resetRequest);
+
+      if (!verifyPassword(otp, resetRequest.otp_hash)) {
+        await pool.execute(
+          `
+            UPDATE password_reset_otps
+            SET attempt_count = attempt_count + 1
+            WHERE id = ?
+          `,
+          [resetRequest.id],
+        );
+        throw httpError("OTP ບໍ່ຖືກຕ້ອງ");
+      }
+
+      const resetToken = crypto.randomBytes(32).toString("base64url");
+      const resetTokenExpiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MINUTES * 60_000);
+
+      await pool.execute(
+        `
+          UPDATE password_reset_otps
+          SET
+            verified_at = CURRENT_TIMESTAMP,
+            reset_token_digest = ?,
+            reset_token_expires_at = ?
+          WHERE id = ?
+        `,
+        [digestResetToken(resetToken), resetTokenExpiresAt, resetRequest.id],
+      );
+
+      return res.json({
+        ok: true,
+        resetToken,
+        expiresInMinutes: PASSWORD_RESET_TOKEN_TTL_MINUTES,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.post("/api/auth/password-reset/confirm", async (req, res, next) => {
+    const connection = await pool.getConnection();
+
+    try {
+      await ensurePasswordResetTable(pool);
+
+      const resetToken = normalizeText(req.body.resetToken);
+      const newPassword = String(req.body.newPassword ?? "");
+
+      if (!resetToken) throw httpError("ກະລຸນາຢືນຢັນ OTP ກ່ອນ");
+      if (newPassword.length < 6) throw httpError("ລະຫັດຜ່ານໃໝ່ຕ້ອງມີຢ່າງໜ້ອຍ 6 ຕົວອັກສອນ");
+
+      const [rows] = await connection.execute(
+        `
+          SELECT id, member_id, reset_token_expires_at
+          FROM password_reset_otps
+          WHERE reset_token_digest = ?
+            AND consumed_at IS NULL
+          ORDER BY id DESC
+          LIMIT 1
+        `,
+        [digestResetToken(resetToken)],
+      );
+      const resetRequest = rows[0];
+
+      if (!resetRequest) throw httpError("ລິ້ງປ່ຽນລະຫັດບໍ່ຖືກຕ້ອງ ຫຼື ໝົດອາຍຸ");
+      if (new Date(resetRequest.reset_token_expires_at).getTime() < Date.now()) {
+        throw httpError("ການຢືນຢັນໝົດອາຍຸແລ້ວ ກະລຸນາຂໍ OTP ໃໝ່");
+      }
+
+      await connection.beginTransaction();
+      await connection.execute(
+        `
+          UPDATE members
+          SET password_hash = ?
+          WHERE id = ?
+        `,
+        [hashPassword(newPassword), resetRequest.member_id],
+      );
+      await connection.execute(
+        `
+          UPDATE password_reset_otps
+          SET consumed_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [resetRequest.id],
+      );
+      await connection.commit();
+
+      return res.json({ ok: true });
+    } catch (error) {
+      try {
+        await connection.rollback();
+      } catch {
+        // Ignore rollback errors and return the original error.
+      }
+      return next(error);
+    } finally {
+      connection.release();
+    }
+  });
+
   if (process.env.ENABLE_DEMO_LOGIN === "true") {
     app.post("/api/auth/demo-login/:id", async (req, res, next) => {
     try {
@@ -260,10 +535,6 @@ export function registerAuthRoutes(app, pool) {
         "student card image must be JPG, PNG, or WEBP",
       );
 
-      if (!cardImageUrl?.startsWith("https://") && !cardImageUrl?.startsWith("http://")) {
-        return res.status(400).json({ error: "ກະລຸນາໃຊ້ລິ້ງ URL ຮູບບັດນັກສຶກສາ (https://...)" });
-      }
-
       const [result] = await pool.execute(
         `
           INSERT INTO members (
@@ -292,7 +563,7 @@ export function registerAuthRoutes(app, pool) {
           email,
           normalizeText(req.body.phone),
           departmentId,
-          "pending",
+          "verified",
           safeCardImageUrl,
         ],
       );
@@ -300,7 +571,7 @@ export function registerAuthRoutes(app, pool) {
       await pool.execute(
         `
           INSERT INTO student_card_uploads (member_id, image_url, status)
-          VALUES (?, ?, 'pending')
+          VALUES (?, ?, 'approved')
         `,
         [result.insertId, safeCardImageUrl],
       );
@@ -379,6 +650,11 @@ export function registerAuthRoutes(app, pool) {
       const existing = await queryMemberById(pool, id);
 
       if (!existing) return res.status(404).json({ error: "ບໍ່ພົບສະມາຊິກ" });
+      if (existing.role === "student") {
+        return res.status(403).json({
+          error: "ອາຈານບໍ່ສາມາດແກ້ໄຂຂໍ້ມູນນັກສຶກສາ ສາມາດປິດໃຊ້ງານ ຫຼື ລຶບບັນຊີເທົ່ານັ້ນ",
+        });
+      }
 
       requireFields(req.body, ["username", "firstName", "lastName", "email", "phone", "department"]);
 
@@ -448,39 +724,28 @@ export function registerAuthRoutes(app, pool) {
     }
   });
 
-  app.patch("/api/members/:id/identity-status", async (req, res, next) => {
+  app.delete("/api/members/:id", async (req, res, next) => {
     try {
       const id = Number(req.params.id);
-      const identityStatus = normalizeText(req.body.identityStatus);
       const actorId = Number(req.body.actorId) || null;
-      assertIdentityStatus(identityStatus);
+      const existing = await queryMemberById(pool, id);
 
-      const uploadStatus =
-        identityStatus === "verified" ? "approved" : identityStatus === "rejected" ? "rejected" : "pending";
+      if (!existing) return res.status(404).json({ error: "ບໍ່ພົບສະມາຊິກ" });
+      if (actorId === id) return res.status(400).json({ error: "ບໍ່ສາມາດລຶບບັນຊີທີ່ກຳລັງໃຊ້ງານຢູ່" });
+      if (existing.role !== "student") {
+        return res.status(403).json({ error: "ໜ້ານີ້ອະນຸຍາດໃຫ້ລຶບສະເພາະບັນຊີນັກສຶກສາ" });
+      }
 
-      const [result] = await pool.execute(`UPDATE members SET identity_status = ? WHERE id = ?`, [
-        identityStatus,
-        id,
-      ]);
-
-      if (!result.affectedRows) return res.status(404).json({ error: "ບໍ່ພົບສະມາຊິກ" });
-
-      await pool.execute(
-        `
-          UPDATE student_card_uploads
-          SET
-            status = ?,
-            reviewed_by = ?,
-            reviewed_at = CASE WHEN ? = 'pending' THEN NULL ELSE CURRENT_TIMESTAMP END
-          WHERE member_id = ?
-          ORDER BY created_at DESC, id DESC
-          LIMIT 1
-        `,
-        [uploadStatus, actorId, uploadStatus, id],
-      );
-
-      res.json(await queryMemberById(pool, id));
+      await pool.execute(`DELETE FROM members WHERE id = ?`, [id]);
+      res.status(204).end();
     } catch (error) {
+      if (error?.code === "ER_ROW_IS_REFERENCED_2" || error?.code === "ER_ROW_IS_REFERENCED") {
+        const relatedDataError = new Error(
+          "ບັນຊີນີ້ມີປະຫວັດປະກາດ ຫຼື ທຸລະກຳແລ້ວ ກະລຸນາໃຊ້ປິດໃຊ້ງານແທນການລຶບ",
+        );
+        relatedDataError.statusCode = 409;
+        return next(relatedDataError);
+      }
       next(mapMysqlError(error));
     }
   });
@@ -502,14 +767,6 @@ export function registerAuthRoutes(app, pool) {
           ? requireUploadedImage(avatarUrl, "profile image must be JPG, PNG, or WEBP")
           : avatarUrl;
 
-      if (cardImageUrl !== undefined && cardImageUrl && !cardImageUrl.startsWith("https://") && !cardImageUrl.startsWith("http://")) {
-        return res.status(400).json({ error: "ກະລຸນາໃຊ້ລິ້ງ URL ຮູບບັດນັກສຶກສາ (https://...)" });
-      }
-
-      if (avatarUrl !== undefined && avatarUrl && !avatarUrl.startsWith("https://") && !avatarUrl.startsWith("http://")) {
-        return res.status(400).json({ error: "ກະລຸນາໃຊ້ລິ້ງ URL ຮູບໂປຣໄຟລ໌ (https://...)" });
-      }
-
       const [result] = await pool.execute(
         `
           UPDATE members
@@ -521,7 +778,6 @@ export function registerAuthRoutes(app, pool) {
             department_id = COALESCE(?, department_id),
             student_code = COALESCE(?, student_code),
             employee_code = COALESCE(?, employee_code),
-            identity_status = COALESCE(?, identity_status),
             card_image_url = COALESCE(?, card_image_url),
             avatar_url = COALESCE(?, avatar_url)
           WHERE id = ?
@@ -534,7 +790,6 @@ export function registerAuthRoutes(app, pool) {
           departmentId ?? null,
           req.body.studentCode !== undefined ? normalizeText(req.body.studentCode) : null,
           req.body.employeeCode !== undefined ? normalizeText(req.body.employeeCode) : null,
-          req.body.identityStatus !== undefined ? normalizeText(req.body.identityStatus) : null,
           safeProfileCardImageUrl ?? null,
           safeAvatarUrl ?? null,
           id,
@@ -547,7 +802,7 @@ export function registerAuthRoutes(app, pool) {
         await pool.execute(
           `
             INSERT INTO student_card_uploads (member_id, image_url, status)
-            VALUES (?, ?, 'pending')
+            VALUES (?, ?, 'approved')
           `,
           [id, safeProfileCardImageUrl],
         );

@@ -76,15 +76,6 @@ export function lostStatusLabel(status) {
   return labels[status] ?? status;
 }
 
-export function identityStatusLabel(status) {
-  const labels = {
-    pending: "ລໍຖ້າກວດສອບ",
-    verified: "ຢືນຢັນຕົວຕົນແລ້ວ",
-    rejected: "ຖືກປະຕິເສດ",
-  };
-  return labels[status] ?? status;
-}
-
 export function initials(name) {
   return String(name)
     .split(" ")

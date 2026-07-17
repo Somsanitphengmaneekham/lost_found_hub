@@ -24,12 +24,10 @@ function userOwnsLost(item, currentUser) {
 
 function userOwnsMatch(match, currentUser) {
   const lostOwnerId = match.lost?.ownerId;
-  const foundFinderId = match.found?.finderId;
-
-  return Number(lostOwnerId) === Number(currentUser.id) || Number(foundFinderId) === Number(currentUser.id);
+  return Number(lostOwnerId) === Number(currentUser.id);
 }
 
-function buildTeacherNotifications({ foundItems, lostReports, matches, members }) {
+function buildTeacherNotifications({ foundItems, lostReports }) {
   const approvalNotifications = foundItems
     .filter((item) => TEACHER_APPROVAL_STATUSES.has(item.status))
     .map((item) => {
@@ -64,78 +62,10 @@ function buildTeacherNotifications({ foundItems, lostReports, matches, members }
       priority: 1,
     }));
 
-  const matchNotifications = matches
-    .filter((match) => match.status === "suggested" || match.status === "confirmed")
-    .map((match) => {
-      const isSuggested = match.status === "suggested";
-      const foundTitle = match.found?.title ?? "ຂອງທີ່ພົບ";
-      const lostTitle = match.lost?.title ?? "ຂອງສູນຫາຍ";
-
-      return {
-        id: `teacher-match-${match.id}-${match.status}`,
-        audience: "teacher",
-        tone: isSuggested ? "blue" : "green",
-        title: isSuggested ? "ລະບົບພົບລາຍການທີ່ອາດກົງກັນ" : "Match ຖືກຢືນຢັນ ລໍຖ້າຄືນຂອງ",
-        description: `${lostTitle} ອາດກົງກັບ ${foundTitle}`,
-        meta: `ສະເພາະອາຈານ · ຄະແນນ Match ${Math.round(Number(match.matchScore) || 0)}%`,
-        actionLabel: "ໄປໜ້າ Match",
-        href: "#matches",
-        createdAt: notificationDate(match.createdAt),
-        priority: isSuggested ? 2 : 1,
-      };
-    });
-
-  const identityNotifications = members
-    .filter((member) => member.role === "student" && member.identityStatus === "pending")
-    .map((member) => ({
-      id: `teacher-identity-${member.id}`,
-      audience: "teacher",
-      tone: "purple",
-      title: "ນັກສຶກສາລໍຖ້າຢືນຢັນຕົວຕົນ",
-      description: `${member.fullName || member.username} · ${member.department || "ບໍ່ລະບຸພາກວິຊາ"}`,
-      meta: "ສະເພາະອາຈານ · ກວດຮູບບັດນັກສຶກສາ",
-      actionLabel: "ໄປຈັດການຜູ້ໃຊ້",
-      href: "#master-data",
-      createdAt: "",
-      priority: 1,
-    }));
-
-  return [...approvalNotifications, ...lostApprovalNotifications, ...matchNotifications, ...identityNotifications].sort(sortNotifications);
+  return [...approvalNotifications, ...lostApprovalNotifications].sort(sortNotifications);
 }
 
 function buildStudentNotifications({ currentUser, foundItems, lostReports, matches, returnRecords }) {
-  const identityNotifications = [];
-
-  if (currentUser.identityStatus === "pending") {
-    identityNotifications.push({
-      id: "student-identity-pending",
-      audience: "student",
-      tone: "amber",
-      title: "ບັດນັກສຶກສາກຳລັງລໍຖ້າກວດສອບ",
-      description: "ອາຈານຈະກວດຮູບບັດກ່ອນຢືນຢັນຕົວຕົນ",
-      meta: "ສະເພາະນັກສຶກສາ · ສະຖານະໂປຣໄຟລ໌",
-      actionLabel: "ໄປໂປຣໄຟລ໌",
-      href: "#profile",
-      createdAt: "",
-      priority: 1,
-    });
-  }
-
-  if (currentUser.identityStatus === "rejected") {
-    identityNotifications.push({
-      id: "student-identity-rejected",
-      audience: "student",
-      tone: "red",
-      title: "ການຢືນຢັນຕົວຕົນຖືກປະຕິເສດ",
-      description: "ກະລຸນາອັບໂຫຼດຮູບບັດນັກສຶກສາໃໝ່ໃຫ້ຊັດເຈນ",
-      meta: "ສະເພາະນັກສຶກສາ · ຕ້ອງແກ້ໄຂ",
-      actionLabel: "ໄປໂປຣໄຟລ໌",
-      href: "#profile",
-      createdAt: "",
-      priority: 1,
-    });
-  }
-
   const foundNotifications = foundItems
     .filter((item) => userOwnsFound(item, currentUser))
     .flatMap((item) => {
@@ -197,7 +127,7 @@ function buildStudentNotifications({ currentUser, foundItems, lostReports, match
             audience: "student",
             tone: "red",
             title: "ລາຍການຂອງທ່ານບໍ່ຜ່ານການກວດສອບ",
-            description: `${item.title} · ກະລຸນາກວດລາຍລະອຽດແລ້ວສົ່ງໃໝ່`,
+            description: `${item.title} · ${item.rejectReason || "ກະລຸນາກວດລາຍລະອຽດແລ້ວສົ່ງໃໝ່"}`,
             meta: "ສະເພາະນັກສຶກສາ · ຕ້ອງແກ້ໄຂ",
             actionLabel: "ໄປແຈ້ງພົບ",
             href: "#found-form",
@@ -228,7 +158,9 @@ function buildStudentNotifications({ currentUser, foundItems, lostReports, match
             ? "ປະກາດຂອງສູນຫາຍລໍຖ້າອາຈານອະນຸມັດ"
             : isRejected
               ? "ປະກາດຂອງສູນຫາຍບໍ່ຜ່ານການກວດສອບ"
-              : "ປະກາດຂອງສູນຫາຍຂອງທ່ານຖືກບັນທຶກແລ້ວ",
+              : isPublished
+                ? "ປະກາດຂອງສູນຫາຍຂອງທ່ານຖືກອະນຸມັດແລ້ວ"
+                : "ປະກາດຂອງສູນຫາຍຂອງທ່ານຖືກບັນທຶກແລ້ວ",
         description: `${item.title} · ${item.location}`,
         meta: "ສະເພາະນັກສຶກສາ · ຕິດຕາມສະຖານະຂອງຕົນເອງ",
         actionLabel: "ເບິ່ງລາຍງານ",
@@ -245,46 +177,56 @@ function buildStudentNotifications({ currentUser, foundItems, lostReports, match
     .filter(
       (match) =>
         userOwnsMatch(match, currentUser) ||
-        myLostIds.has(Number(match.lostPostId)) ||
-        myFoundIds.has(Number(match.foundPostId)),
+        myLostIds.has(Number(match.lostPostId)),
     )
-    .filter((match) => match.status === "suggested" || match.status === "confirmed")
+    .filter((match) => match.status !== "rejected")
     .map((match) => {
-      const isConfirmed = match.status === "confirmed";
       const foundTitle = match.found?.title ?? "ຂອງທີ່ພົບ";
       const lostTitle = match.lost?.title ?? "ຂອງສູນຫາຍ";
 
       return {
-        id: `student-match-${match.id}-${match.status}`,
+        id: `student-match-${match.id}`,
         audience: "student",
-        tone: isConfirmed ? "green" : "blue",
-        title: isConfirmed ? "ອາຈານຢືນຢັນລາຍການທີ່ກົງກັນແລ້ວ" : "ພົບລາຍການທີ່ອາດກົງກັນ",
+        tone: "blue",
+        title: "ພົບລາຍການທີ່ອາດກົງກັນ",
         description: `${lostTitle} ອາດກົງກັບ ${foundTitle}`,
         meta: `ສະເພາະນັກສຶກສາ · ຄະແນນ Match ${Math.round(Number(match.matchScore) || 0)}%`,
-        actionLabel: "ເບິ່ງ Dashboard",
-        href: "#dashboard",
+        actionLabel: "ເບິ່ງລາຍການແນະນຳ",
+        href: "#matching",
         createdAt: notificationDate(match.createdAt),
-        priority: isConfirmed ? 1 : 2,
+        priority: 2,
       };
     });
 
   const returnNotifications = returnRecords
-    .filter((record) => myFoundIds.has(Number(record.foundPostId)))
-    .map((record) => ({
-      id: `student-return-${record.id}`,
-      audience: "student",
-      tone: "green",
-      title: "ບັນທຶກການຄືນຂອງແລ້ວ",
-      description: "ລາຍການທີ່ທ່ານແຈ້ງພົບຖືກຄືນໃຫ້ເຈົ້າຂອງແລ້ວ",
-      meta: "ສະເພາະນັກສຶກສາ · ການຄືນຂອງ",
-      actionLabel: "ເບິ່ງລາຍງານ",
-      href: "#reports",
-      createdAt: notificationDate(record.returnedAt),
-      priority: 3,
-    }));
+    .filter(
+      (record) =>
+        myFoundIds.has(Number(record.foundPostId)) ||
+        record.receivedBy === currentUser.username ||
+        record.receivedBy === currentUser.fullName,
+    )
+    .map((record) => {
+      const isReceiver =
+        record.receivedBy === currentUser.username ||
+        record.receivedBy === currentUser.fullName;
+
+      return {
+        id: `student-return-${record.id}`,
+        audience: "student",
+        tone: "green",
+        title: "ບັນທຶກການຄືນຂອງແລ້ວ",
+        description: isReceiver
+          ? "ອາຈານໄດ້ບັນທຶກວ່າທ່ານຮັບສິ່ງຂອງຄືນແລ້ວ"
+          : "ລາຍການທີ່ທ່ານແຈ້ງພົບຖືກຄືນໃຫ້ເຈົ້າຂອງແລ້ວ",
+        meta: "ສະເພາະນັກສຶກສາ · ການຄືນຂອງ",
+        actionLabel: "ເບິ່ງລາຍງານ",
+        href: "#reports",
+        createdAt: notificationDate(record.returnedAt),
+        priority: 3,
+      };
+    });
 
   return [
-    ...identityNotifications,
     ...foundNotifications,
     ...lostNotifications,
     ...matchNotifications,
@@ -292,11 +234,11 @@ function buildStudentNotifications({ currentUser, foundItems, lostReports, match
   ].sort(sortNotifications);
 }
 
-export function buildNotifications({ currentUser, foundItems, lostReports, matches, members, returnRecords }) {
+export function buildNotifications({ currentUser, foundItems, lostReports, matches, returnRecords }) {
   if (!currentUser) return [];
 
   if (currentUser.role === "teacher") {
-    return buildTeacherNotifications({ foundItems, lostReports, matches, members });
+    return buildTeacherNotifications({ foundItems, lostReports });
   }
 
   return buildStudentNotifications({ currentUser, foundItems, lostReports, matches, returnRecords });

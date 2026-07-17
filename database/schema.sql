@@ -27,7 +27,6 @@ create type found_post_status as enum (
 create type image_owner_type as enum ('lost_post', 'found_post');
 create type card_upload_status as enum ('pending', 'approved', 'rejected');
 create type claim_status as enum ('submitted', 'under_review', 'approved', 'rejected', 'returned');
-create type match_status as enum ('suggested', 'confirmed', 'rejected');
 
 create table departments (
   id uuid primary key default gen_random_uuid(),
@@ -73,7 +72,7 @@ create table members (
   email varchar(180) not null unique,
   phone varchar(40),
   department_id uuid references departments(id) on update cascade on delete set null,
-  identity_status identity_status not null default 'pending',
+  identity_status identity_status not null default 'verified',
   card_image_url text,
   avatar_url text,
   is_active boolean not null default true,
@@ -92,7 +91,7 @@ create table student_card_uploads (
   id uuid primary key default gen_random_uuid(),
   member_id uuid not null references members(id) on update cascade on delete cascade,
   image_url text not null,
-  status card_upload_status not null default 'pending',
+  status card_upload_status not null default 'approved',
   reviewed_by uuid references members(id) on update cascade on delete set null,
   reviewed_at timestamptz,
   reject_reason text,
@@ -188,7 +187,6 @@ create table matches (
   lost_post_id uuid not null references lost_posts(id) on update cascade on delete cascade,
   found_post_id uuid not null references found_posts(id) on update cascade on delete cascade,
   match_score numeric(5,2) not null,
-  status match_status not null default 'suggested',
   created_at timestamptz not null default now(),
   constraint matches_unique_pair unique (lost_post_id, found_post_id)
 );

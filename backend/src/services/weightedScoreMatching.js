@@ -66,9 +66,9 @@ export function calculateMatchScore(lost, found) {
   };
 }
 
-async function saveSuggestedMatch(pool, match) {
+async function saveRecommendation(pool, match) {
   const [existingRows] = await pool.execute(
-    `SELECT id, status
+    `SELECT id
      FROM matches
      WHERE lost_post_id = ?
        AND found_post_id = ?
@@ -80,26 +80,24 @@ async function saveSuggestedMatch(pool, match) {
   const existing = existingRows[0];
 
   if (existing) {
-    if (existing.status === "suggested") {
-      await pool.execute(
-        `UPDATE matches
-         SET match_score = ?
-         WHERE id = ?`,
-        [match.score, existing.id],
-      );
-    }
+    await pool.execute(
+      `UPDATE matches
+       SET match_score = ?
+       WHERE id = ?`,
+      [match.score, existing.id],
+    );
 
     return {
       ...match,
       matchId: existing.id,
-      status: existing.status,
+      status: "suggested",
       saved: true,
     };
   }
 
   const [result] = await pool.execute(
-    `INSERT INTO matches (lost_post_id, found_post_id, match_score, status)
-     VALUES (?, ?, ?, 'suggested')`,
+    `INSERT INTO matches (lost_post_id, found_post_id, match_score)
+     VALUES (?, ?, ?)`,
     [match.lostPostId, match.foundPostId, match.score],
   );
 
@@ -186,10 +184,13 @@ export async function findCandidateMatches(pool, lostPostId, options = {}) {
     .filter((match) => match.matched)
     .sort((a, b) => b.score - a.score);
 
+  // Recommendations are derived data. Rebuild them so edited posts never show stale scores.
+  await pool.execute(`DELETE FROM matches WHERE lost_post_id = ?`, [lost.id]);
+
   const savedMatches = [];
 
   for (const match of matches) {
-    savedMatches.push(await saveSuggestedMatch(pool, match));
+    savedMatches.push(await saveRecommendation(pool, match));
   }
 
   return savedMatches;

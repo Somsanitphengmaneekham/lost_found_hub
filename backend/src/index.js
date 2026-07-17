@@ -86,6 +86,7 @@ app.use(express.json({ limit: process.env.API_JSON_LIMIT ?? "1mb" }));
 // Apply rate limits: auth routes stricter than general routes
 app.use("/api/auth/login", authRateLimit);
 app.use("/api/auth/register", authRateLimit);
+app.use("/api/auth/password-reset", authRateLimit);
 app.use("/api", generalRateLimit);
 
 registerUploadRoutes(app);
@@ -111,7 +112,7 @@ registerBootstrapRoutes(app, pool, {
   },
   queryLocations: async (db) => {
     const [rows] = await db.query(`
-      SELECT id, name_th, building, floor, detail, location_type, is_active
+      SELECT id, name_th, building, floor, detail, is_active
       FROM locations
       ORDER BY name_th ASC
     `);
@@ -121,7 +122,6 @@ registerBootstrapRoutes(app, pool, {
       nameTh: row.name_th,
       building: row.building ?? "",
       floor: row.floor ?? "",
-      locationType: row.location_type,
       detail: row.detail ?? "",
       isActive: Boolean(row.is_active),
     }));
@@ -274,6 +274,7 @@ async function fetchFoundPosts(db) {
       fp.status,
       approver.username AS approvedBy,
       fp.approved_at AS approvedAt,
+      fp.reject_reason AS rejectReason,
       CONCAT(finder.first_name, ' ', finder.last_name) AS finderName,
       COALESCE(finder.phone, finder.email) AS finderEmail,
       (
@@ -368,7 +369,6 @@ async function fetchMatches(db) {
       m.lost_post_id,
       m.found_post_id,
       m.match_score,
-      m.status,
       m.created_at,
       lp.title AS lost_title,
       lp.description AS lost_description,
@@ -435,7 +435,7 @@ async function fetchMatches(db) {
       lostPostId: row.lost_post_id,
       foundPostId: row.found_post_id,
       matchScore: Number(row.match_score),
-      status: row.status,
+      status: "suggested",
       createdAt: row.created_at,
       reasons: calculateMatchScore(lost, found).reasons,
       lost: {
