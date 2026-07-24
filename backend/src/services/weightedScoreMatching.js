@@ -1,5 +1,36 @@
+const MATCH_THRESHOLD = 70;
+const DEFAULT_DATE_WINDOW_DAYS = 7;
+const ACTIVE_LOST_STATUSES = new Set(["pending_approval", "published", "matched"]);
+const GENERIC_ITEM_WORDS = new Set([
+  "usb",
+  "type",
+  "typec",
+  "type-c",
+  "black",
+  "white",
+  "silver",
+  "gold",
+  "lost",
+  "found",
+  "item",
+  "ສີ",
+  "ດຳ",
+  "ດໍາ",
+  "ຂາວ",
+  "ເງິນ",
+  "ຄຳ",
+  "ຄໍາ",
+  "ພົບ",
+  "ເກັບ",
+  "ສູນຫາຍ",
+  "ຫາຍ",
+  "ສີດຳ",
+  "ສີດໍາ",
+  "ສີຂາວ",
+]);
+
 function normalizeText(value) {
-  return String(value ?? "").trim().toLowerCase();
+  return String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function daysBetween(dateA, dateB) {
@@ -10,22 +41,56 @@ function daysBetween(dateA, dateB) {
 
   if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null;
 
-  return Math.abs(Math.round((a.getTime() - b.getTime()) / 86_400_000));
+  return Math.abs((a.getTime() - b.getTime()) / 86_400_000);
+}
+
+function significantWords(value) {
+  return normalizeText(value)
+    .split(/[^\p{L}\p{N}+#.-]+/u)
+    .map((word) => word.replace(/^[-_.]+|[-_.]+$/g, ""))
+    .filter((word) => word.length >= 2 && !GENERIC_ITEM_WORDS.has(word));
+}
+
+function hasSharedSignificantWord(left, right) {
+  const leftWords = significantWords(left);
+  const rightWords = significantWords(right);
+  if (!leftWords.length || !rightWords.length) return false;
+
+  const rightSet = new Set(rightWords);
+  return leftWords.some((leftWord) => {
+    if (rightSet.has(leftWord)) return true;
+
+    return rightWords.some((rightWord) => {
+      if (leftWord.length < 4 || rightWord.length < 4) return false;
+      return leftWord.includes(rightWord) || rightWord.includes(leftWord);
+    });
+  });
+}
+
+function hasItemIdentityOverlap(lost, found) {
+  const lostText = `${lost.title ?? ""} ${lost.brand ?? ""} ${lost.unique_mark ?? ""} ${lost.description ?? ""}`;
+  const foundText = `${found.title ?? ""} ${found.brand ?? ""} ${found.unique_mark ?? ""} ${found.description ?? ""}`;
+  return hasSharedSignificantWord(lostText, foundText);
 }
 
 function containsSimilarDetail(lost, found) {
-  const lostText = normalizeText(
+  const lostBrand = normalizeText(lost.brand);
+  const foundBrand = normalizeText(found.brand);
+  if (lostBrand && foundBrand && hasSharedSignificantWord(lostBrand, foundBrand)) return true;
+
+  if (hasSharedSignificantWord(lost.title, found.title)) return true;
+  if (hasSharedSignificantWord(lost.unique_mark, found.unique_mark)) return true;
+  if (hasSharedSignificantWord(lost.description, found.description)) return true;
+
+  const lostColor = normalizeText(lost.color);
+  const foundColor = normalizeText(found.color);
+  const colorMatched = lostColor && foundColor && lostColor === foundColor;
+  if (colorMatched && hasItemIdentityOverlap(lost, found)) return true;
+
+  return hasSharedSignificantWord(
     `${lost.brand ?? ""} ${lost.unique_mark ?? ""} ${lost.description ?? ""}`,
-  );
-  const foundText = normalizeText(
     `${found.brand ?? ""} ${found.unique_mark ?? ""} ${found.description ?? ""}`,
   );
-
-  if (!lostText || !foundText) return false;
-
-  return lostText
-    .split(/\s+/u)
-    .some((word) => word.length >= 3 && foundText.includes(word));
 }
 
 export function calculateMatchScore(lost, found) {
@@ -52,9 +117,7 @@ export function calculateMatchScore(lost, found) {
     reasons.push({ label: "ວັນທີ່ໃກ້ກັນບໍ່ເກີນ 3 ວັນ", points: 20 });
   }
 
-  const lostColor = normalizeText(lost.color);
-  const foundColor = normalizeText(found.color);
-  if ((lostColor && lostColor === foundColor) || containsSimilarDetail(lost, found)) {
+  if (containsSimilarDetail(lost, found)) {
     score += 15;
     reasons.push({ label: "ສີ ຫຼື ລາຍລະອຽດໃກ້ຄຽງກັນ", points: 15 });
   }
@@ -110,8 +173,8 @@ async function saveRecommendation(pool, match) {
 }
 
 export async function findCandidateMatches(pool, lostPostId, options = {}) {
-  const threshold = Number(options.threshold ?? 70);
-  const dateWindowDays = Number(options.dateWindowDays ?? 7);
+  const threshold = Number(options.threshold ?? MATCH_THRESHOLD);
+  const dateWindowDays = Number(options.dateWindowDays ?? DEFAULT_DATE_WINDOW_DAYS);
   const limit = Math.min(Math.max(Number(options.limit ?? 50), 1), 100);
 
   const [lostRows] = await pool.execute(
@@ -126,7 +189,13 @@ export async function findCandidateMatches(pool, lostPostId, options = {}) {
   const lost = lostRows[0];
   if (!lost) return [];
 
-  // Candidate query first: do not compare every found_posts row.
+  if (!ACTIVE_LOST_STATUSES.has(lost.status)) {
+    await pool.execute(`DELETE FROM matches WHERE lost_post_id = ?`, [lost.id]);
+    return [];
+  }
+
+  // Candidate query first: use category + nearby date to avoid comparing every row.
+  // Do not pre-filter by location/color because brand or detail can still push a valid pair over 70%.
   const [candidates] = await pool.execute(
     `SELECT
        fp.*,
@@ -136,19 +205,18 @@ export async function findCandidateMatches(pool, lostPostId, options = {}) {
      LEFT JOIN item_categories c ON c.id = fp.category_id
      LEFT JOIN locations l ON l.id = fp.found_location_id
      WHERE fp.status IN ('approved', 'matched')
+       AND fp.deleted_at IS NULL
        AND fp.category_id = ?
        AND (
          ? IS NULL
+         OR fp.found_at IS NULL
          OR fp.found_at BETWEEN DATE_SUB(?, INTERVAL ? DAY)
                             AND DATE_ADD(?, INTERVAL ? DAY)
        )
-       AND (
-         ? IS NULL
-         OR fp.found_location_id = ?
-         OR ? IS NULL
-         OR fp.color = ?
-       )
-     ORDER BY fp.found_at DESC
+     ORDER BY
+       (fp.found_location_id = ?) DESC,
+       (LOWER(TRIM(COALESCE(fp.color, ''))) = LOWER(TRIM(COALESCE(?, '')))) DESC,
+       fp.found_at DESC
      LIMIT ${limit}`,
     [
       lost.category_id,
@@ -158,8 +226,6 @@ export async function findCandidateMatches(pool, lostPostId, options = {}) {
       lost.lost_at,
       dateWindowDays,
       lost.lost_location_id,
-      lost.lost_location_id,
-      lost.color,
       lost.color,
     ],
   );
@@ -194,4 +260,47 @@ export async function findCandidateMatches(pool, lostPostId, options = {}) {
   }
 
   return savedMatches;
+}
+
+export async function cleanupStaleMatches(pool) {
+  await pool.query(`
+    DELETE old_match
+    FROM matches old_match
+    INNER JOIN matches newer_match
+      ON newer_match.lost_post_id = old_match.lost_post_id
+     AND newer_match.found_post_id = old_match.found_post_id
+     AND newer_match.id > old_match.id
+  `);
+
+  await pool.query(`
+    DELETE m
+    FROM matches m
+    LEFT JOIN lost_posts lp ON lp.id = m.lost_post_id
+    LEFT JOIN found_posts fp ON fp.id = m.found_post_id
+    WHERE lp.id IS NULL
+       OR fp.id IS NULL
+       OR lp.deleted_at IS NOT NULL
+       OR fp.deleted_at IS NOT NULL
+       OR lp.status NOT IN ('pending_approval', 'published', 'matched')
+       OR fp.status NOT IN ('approved', 'matched')
+  `);
+}
+
+export async function rebuildAllMatches(pool, options = {}) {
+  await cleanupStaleMatches(pool);
+
+  const [lostRows] = await pool.query(`
+    SELECT id
+    FROM lost_posts
+    WHERE deleted_at IS NULL
+      AND status IN ('pending_approval', 'published', 'matched')
+    ORDER BY updated_at DESC, id DESC
+  `);
+
+  const rebuilt = [];
+  for (const lost of lostRows) {
+    rebuilt.push(...(await findCandidateMatches(pool, lost.id, options)));
+  }
+
+  return rebuilt;
 }

@@ -76,7 +76,7 @@ const roleGuideSteps = {
     {
       icon: Link2,
       title: "ເບິ່ງລາຍການແນະນຳ",
-      description: "ເບິ່ງຄະແນນຄວາມຄ້າຍຄືຈາກລະບົບ ໂດຍບໍ່ຕ້ອງອະນຸມັດ ຫຼື ຢືນຢັນ Match.",
+      description: "ເບິ່ງຄະແນນຄວາມຄ້າຍຄືຈາກລະບົບ ເພື່ອຊ່ວຍກວດລາຍການທີ່ອາດໃກ້ຄຽງກັນ.",
     },
     {
       icon: ClipboardCheck,
@@ -179,7 +179,7 @@ function TeacherDashboard({
       tone: "amber",
     },
     {
-      label: "ລາຍການທີ່ຄ້າຍຄືກັນ",
+      label: "ລາຍການໃກ້ຄຽງ",
       value: recommendationMatches.length,
       icon: Link2,
       tone: "blue",
@@ -237,10 +237,10 @@ function TeacherDashboard({
 
         <DashboardPanel
           actionHref="#matches"
-          actionLabel="ເບິ່ງ Match"
+          actionLabel="ເບິ່ງລາຍການໃກ້ຄຽງ"
           className="dashboard-panel-large"
           icon={Link2}
-          title="ລາຍການທີ່ອາດກົງກັນ"
+          title="ລາຍການໃກ້ຄຽງ"
         >
           {recommendationMatches.length ? (
             <div className="dashboard-list">
@@ -249,7 +249,7 @@ function TeacherDashboard({
               ))}
             </div>
           ) : (
-            <EmptyState title="ຍັງບໍ່ມີ Match" description="ລະບົບຈະເກັບຜົນ Weighted Matching ເມື່ອຄະແນນສູງພໍ" />
+            <EmptyState title="ຍັງບໍ່ມີລາຍການໃກ້ຄຽງ" description="ລະບົບຈະແນະນຳລາຍການເມື່ອຄະແນນຄວາມຄ້າຍຄືສູງພໍ" />
           )}
         </DashboardPanel>
 
@@ -305,7 +305,7 @@ function StudentDashboard({
   const metrics = [
     { label: "ສີ່ງຂອງສູນຫາຍຂອງຂ້ອຍ", value: myLostReports.length, icon: FileQuestion, tone: "amber" },
     { label: "ສີ່ງຂອງທີ່ຂ້ອຍແຈ້ງພົບ", value: myFoundItems.length, icon: Inbox, tone: "blue" },
-    { label: "ລາຍການທີ່ອາດກົງກັນ", value: myMatches.length, icon: Link2, tone: "green" },
+    { label: "ລາຍການໃກ້ຄຽງ", value: myMatches.length, icon: Link2, tone: "green" },
     { label: "ການຄືນສີ່ງຂອງທັງໝົດ", value: returnRecords.length, icon: ClipboardCheck, tone: "slate" },
   ];
 
@@ -315,7 +315,7 @@ function StudentDashboard({
         <div>
           <span className="dashboard-eyebrow">Student Dashboard</span>
           <h2 id="dashboard-title">ພາບລວມລາຍການຂອງຂ້ອຍ</h2>
-          <p>ກວດສະຖານະສີ່ງຂອງທີ່ແຈ້ງສູນຫາຍ, ສີ່ງຂອງທີ່ແຈ້ງພົບ ແລະ Match ທີ່ອາດກ່ຽວຂ້ອງ</p>
+          <p>ກວດສະຖານະສີ່ງຂອງທີ່ແຈ້ງສູນຫາຍ, ສີ່ງຂອງທີ່ແຈ້ງພົບ ແລະ ລາຍການໃກ້ຄຽງທີ່ອາດກ່ຽວຂ້ອງ</p>
         </div>
         <a className="dashboard-primary-link" href="#lost-form">
           ແຈ້ງສີ່ງຂອງສູນຫາຍ
@@ -399,7 +399,7 @@ function StudentDashboard({
           actionHref="#matching"
           actionLabel="ເບິ່ງທັງໝົດ"
           icon={Link2}
-          title="ລາຍການພົບຂອງທີ່ອາດກົງກັນ"
+          title="ລາຍການໃກ້ຄຽງທີ່ລະບົບແນະນຳ"
         >
           {myMatches.length ? (
             <div className="dashboard-list compact">
@@ -415,7 +415,7 @@ function StudentDashboard({
               ))}
             </div>
           ) : (
-            <EmptyState title="ຍັງບໍ່ມີ Match" description="ຖ້າລະບົບພົບລາຍການທີ່ຄະແນນສູງ ຈະສະແດງຢູ່ບ່ອນນີ້" />
+            <EmptyState title="ຍັງບໍ່ມີລາຍການໃກ້ຄຽງ" description="ຖ້າລະບົບພົບລາຍການທີ່ຄະແນນສູງ ຈະສະແດງຢູ່ບ່ອນນີ້" />
           )}
         </DashboardPanel>
       </div>
@@ -504,6 +504,13 @@ function DashboardPanel({ actionHref, actionLabel, children, className = "", ico
 function FoundReviewRow({ item, onApproveFound, onMoveToApproval, onRejectFound }) {
   const meta = safeFoundStatus(item.status);
 
+  function handleReject() {
+    const reason = window.prompt("ກະລຸນາລະບຸເຫດຜົນທີ່ປະຕິເສດປະກາດນີ້");
+    if (reason === null) return;
+    if (!reason.trim()) return;
+    onRejectFound(item.id, reason);
+  }
+
   return (
     <article className="dashboard-work-row">
       <img src={item.image} alt={item.title} />
@@ -532,7 +539,7 @@ function FoundReviewRow({ item, onApproveFound, onMoveToApproval, onRejectFound 
             ອະນຸມັດ
           </button>
         )}
-        <button className="reject-button" onClick={() => onRejectFound(item.id)} type="button">
+        <button className="reject-button" onClick={handleReject} type="button">
           <X size={16} />
           ປະຕິເສດ
         </button>

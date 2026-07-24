@@ -18,6 +18,7 @@ export function useAppData() {
   const [lostReports, setLostReports] = useState([]);
   const [matchRows, setMatchRows] = useState([]);
   const [returnRecords, setReturnRecords] = useState([]);
+  const [claimRequests, setClaimRequests] = useState([]);
   const [appLoading, setAppLoading] = useState(true);
   const [appError, setAppError] = useState("");
   const [masterDataLoading, setMasterDataLoading] = useState(true);
@@ -38,6 +39,7 @@ export function useAppData() {
       setLostReports(data.lostPosts.map(mapLostFromApi));
       setMatchRows(data.matches.map(mapMatchFromApi));
       setReturnRecords(data.returnRecords ?? []);
+      setClaimRequests(data.claimRequests ?? []);
       setMemberList(
         (data.members ?? data.demoUsers ?? []).map((member) => ({
           ...member,
@@ -72,6 +74,8 @@ export function useAppData() {
     setMatchRows,
     returnRecords,
     setReturnRecords,
+    claimRequests,
+    setClaimRequests,
     appLoading,
     appError,
     masterDataLoading,

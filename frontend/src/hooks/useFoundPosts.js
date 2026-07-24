@@ -24,12 +24,22 @@ export const foundInitial = {
   brand: "",
   uniqueMark: "",
   images: [],
+  sourceLostId: null,
+  sourceLostTitle: "",
+  sourceLostLocation: "",
 };
 
 function reportImageValidationMessage(images) {
   const imageCount = Array.isArray(images) ? images.length : 0;
   if (imageCount < 1) return "ກະລຸນາອັບໂຫຼດຮູບຢ່າງໜ້ອຍ 1 ຮູບ";
   if (imageCount > MAX_REPORT_IMAGES) return "ອັບໂຫຼດຮູບໄດ້ສູງສຸດ 3 ຮູບ";
+  return "";
+}
+
+function singleImageValidationMessage(images, label) {
+  const imageCount = Array.isArray(images) ? images.length : 0;
+  if (imageCount < 1) return `ກະລຸນາອັບໂຫຼດ${label}`;
+  if (imageCount > 1) return `${label} ໃສ່ໄດ້ສູງສຸດ 1 ຮູບ`;
   return "";
 }
 
@@ -69,6 +79,25 @@ export function useFoundPosts({ currentUser, foundItems, loadAppData, categoryFo
   function updateFound(field, value) {
     const nextValue = field === "time" ? timeInputValue(value) : value;
     setFoundForm((current) => ({ ...current, [field]: nextValue }));
+  }
+
+  function prefillFoundFromLost(lostItem, navigateToPage) {
+    if (!lostItem) return;
+
+    setEditingFoundId(null);
+    setFoundForm({
+      ...foundInitial,
+      title: lostItem.title ?? "",
+      category: validOption(lostItem.category, categoryFormOptions),
+      color: lostItem.color ?? "",
+      brand: lostItem.brand ?? "",
+      uniqueMark: lostItem.uniqueMark ?? "",
+      sourceLostId: lostItem.id ?? null,
+      sourceLostTitle: lostItem.title ?? "",
+      sourceLostLocation: lostItem.location ?? "",
+    });
+    setToast("ເປີດຟອມແຈ້ງພົບຂອງແລ້ວ ກະລຸນາລະບຸສະຖານທີ່ພົບ, ເວລາ ແລະ ອັບໂຫຼດຮູບພາບ");
+    navigateToPage("found-form");
   }
 
   async function submitFound(event) {
@@ -205,12 +234,18 @@ export function useFoundPosts({ currentUser, foundItems, loadAppData, categoryFo
     }
   }
 
-  async function rejectFoundItem(id) {
+  async function rejectFoundItem(id, reason) {
+    const rejectReason = String(reason ?? "").trim();
+    if (!rejectReason) {
+      setToast("ກະລຸນາລະບຸເຫດຜົນກ່ອນປະຕິເສດປະກາດ");
+      return;
+    }
+
     setAppSaving(true);
     try {
-      await rejectFoundPost(id, currentUser.id);
+      await rejectFoundPost(id, currentUser.id, rejectReason);
       await loadAppData();
-      setToast("ປະຕິເສດລາຍການແລ້ວ ເກັບໄວ້ກວດສອບຍ້ອນຫຼັງ");
+      setToast("ປະຕິເສດລາຍການພ້ອມເຫດຜົນແລ້ວ");
     } catch (error) {
       setToast(error.message || "ປະຕິເສດລາຍການບໍ່ສຳເລັດ");
     } finally {
@@ -218,13 +253,81 @@ export function useFoundPosts({ currentUser, foundItems, loadAppData, categoryFo
     }
   }
 
-  async function returnFoundItem(id, receivedByMemberId) {
+  async function returnFoundItem(id, returnDetails = {}) {
+    const receivedByMemberId = Number(returnDetails.receivedByMemberId ?? returnDetails) || null;
+    const receiverType = returnDetails.receiverType === "representative" ? "representative" : "owner";
+    const receiverName = String(returnDetails.receiverName ?? "").trim();
+    const receiverStudentCode = String(returnDetails.receiverStudentCode ?? "").trim();
+    const receiverDepartment = String(returnDetails.receiverDepartment ?? "").trim();
+    const receiverPhone = String(returnDetails.receiverPhone ?? "").trim();
+    const receiverPhotoError = singleImageValidationMessage(
+      returnDetails.receiverPhotoImages,
+      "ຮູບຜູ້ຮັບພ້ອມສິ່ງຂອງ",
+    );
+
+    if (!receiverName) {
+      setToast("ກະລຸນາກອກຊື່ຜູ້ມາຮັບສິ່ງຂອງ");
+      throw new Error("Receiver name is required");
+    }
+
+    if (!receiverStudentCode && !receiverPhone) {
+      setToast("ກະລຸນາກອກລະຫັດນັກສຶກສາ ຫຼື ເບີໂທຜູ້ມາຮັບ");
+      throw new Error("Receiver student code or phone is required");
+    }
+
+    if (!returnDetails.identityVerified) {
+      setToast("ກະລຸນາຢືນຢັນວ່າກວດບັດນັກສຶກສາ ຫຼື ຂໍ້ມູນແລ້ວ");
+      throw new Error("Identity verification is required");
+    }
+
+    if (receiverPhotoError) {
+      setToast(receiverPhotoError);
+      throw new Error(receiverPhotoError);
+    }
+
+    if (receiverType === "representative") {
+      const authorizationError = singleImageValidationMessage(
+        returnDetails.authorizationImages,
+        "ຫຼັກຖານການອະນຸຍາດ",
+      );
+      if (
+        !returnDetails.representativeName?.trim() ||
+        !returnDetails.representativePhone?.trim() ||
+        !returnDetails.representativeRelation?.trim()
+      ) {
+        setToast("ກະລຸນາກອກຂໍ້ມູນຜູ້ຮັບແທນໃຫ້ຄົບ");
+        throw new Error("Representative details are required");
+      }
+      if (authorizationError) {
+        setToast(authorizationError);
+        throw new Error(authorizationError);
+      }
+    }
+
     setAppSaving(true);
     try {
+      const [receiverPhotoUrl] = await uploadPostImages(returnDetails.receiverPhotoImages);
+      const [authorizationImageUrl] =
+        receiverType === "representative"
+          ? await uploadPostImages(returnDetails.authorizationImages)
+          : [null];
+
       await returnFoundPost(id, {
         returnedByMemberId: currentUser.id,
         receivedByMemberId,
-        note: "ຄືນສິ່ງຂອງທີ່ຫ້ອງຄຸ້ມຄອງ",
+        receiverDepartment,
+        receiverName,
+        receiverPhone,
+        receiverStudentCode,
+        receiverType,
+        receiverPhotoUrl,
+        identityVerified: true,
+        representativeName: returnDetails.representativeName,
+        representativePhone: returnDetails.representativePhone,
+        representativeRelation: returnDetails.representativeRelation,
+        authorizationNote: returnDetails.authorizationNote,
+        authorizationImageUrl,
+        note: returnDetails.note?.trim() || "ຄືນສິ່ງຂອງທີ່ຫ້ອງຄຸ້ມຄອງ",
       });
       await loadAppData();
       setToast("ບັນທຶກການສົ່ງຄືນເຈົ້າຂອງແລ້ວ");
@@ -241,6 +344,7 @@ export function useFoundPosts({ currentUser, foundItems, loadAppData, categoryFo
     editingFoundId,
     appSaving,
     updateFound,
+    prefillFoundFromLost,
     submitFound,
     startEditFound,
     cancelEditFound,

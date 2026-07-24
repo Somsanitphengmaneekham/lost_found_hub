@@ -1,4 +1,4 @@
-import { Check, CircleHelp, ClipboardCheck, Phone, ShieldCheck } from "lucide-react";
+import { Check, CircleHelp, ClipboardCheck, ImageOff, Phone, ShieldCheck } from "lucide-react";
 import { ImageUploadField } from "../components/common/ImageUploadField.jsx";
 import { LocationInput, SelectInput, TextArea, TextInput } from "../components/common/FormControls.jsx";
 
@@ -6,6 +6,10 @@ export function LostReportPage({ categoryOptions, isEditing, locationOptions, lo
   function updateDetails(value) {
     onChange("description", value);
     onChange("uniqueMark", value);
+  }
+
+  function toggleNoImage(checked) {
+    onChange("noImage", checked);
   }
 
   return (
@@ -87,11 +91,35 @@ export function LostReportPage({ categoryOptions, isEditing, locationOptions, lo
             />
           </div>
 
-          <ImageUploadField
-            images={lostForm.images}
-            label="ຮູບພາບສິ່ງຂອງ"
-            onChange={(images) => onChange("images", images)}
-          />
+          <div className="lost-no-image-section">
+            <label className="lost-no-image-toggle">
+              <input
+                checked={Boolean(lostForm.noImage)}
+                onChange={(event) => toggleNoImage(event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                <strong>ບໍ່ມີຮູບພາບຂອງສິ່ງຂອງ</strong>
+                <small>ເລືອກຕົວເລືອກນີ້ໄດ້ສະເພາະກໍລະນີຂອງສູນຫາຍທີ່ບໍ່ມີຮູບຈິງ</small>
+              </span>
+            </label>
+
+            {lostForm.noImage ? (
+              <div className="lost-no-image-note">
+                <ImageOff size={22} />
+                <div>
+                  <strong>ໂພສນີ້ຈະຖືກສົ່ງໂດຍບໍ່ມີຮູບ</strong>
+                  <p>ອາຈານຈະກວດລາຍລະອຽດ, ສະຖານທີ່ ແລະ ຂໍ້ມູນອື່ນໆກ່ອນອະນຸມັດ.</p>
+                </div>
+              </div>
+            ) : (
+              <ImageUploadField
+                images={lostForm.images}
+                label="ຮູບພາບສິ່ງຂອງ"
+                onChange={(images) => onChange("images", images)}
+              />
+            )}
+          </div>
 
           <div className="lost-form-actions">
             <button className="outline-button" onClick={onCancel} type="button">

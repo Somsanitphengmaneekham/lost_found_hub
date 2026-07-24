@@ -159,6 +159,7 @@ registerBootstrapRoutes(app, pool, {
         rr.id,
         rr.claim_request_id,
         rr.found_post_id,
+        cr.lost_post_id,
         returned.username AS returned_by,
         received.username AS received_by,
         CONCAT(
@@ -167,6 +168,7 @@ registerBootstrapRoutes(app, pool, {
         ) AS return_location,
         rr.returned_at
       FROM return_records rr
+      LEFT JOIN claim_requests cr ON cr.id = rr.claim_request_id
       INNER JOIN members returned ON returned.id = rr.returned_by
       INNER JOIN members received ON received.id = rr.received_by
       LEFT JOIN locations l ON l.id = rr.return_location_id
@@ -176,10 +178,56 @@ registerBootstrapRoutes(app, pool, {
       id: row.id,
       claimRequestId: `CR-${row.claim_request_id}`,
       foundPostId: row.found_post_id,
+      lostPostId: row.lost_post_id,
       returnedBy: row.returned_by,
       receivedBy: row.received_by,
       returnLocation: row.return_location ?? "ຫ້ອງຄຸ້ມຄອງ",
       returnedAt: row.returned_at,
+    }));
+  },
+  queryClaimRequests: async (db) => {
+    const [rows] = await db.query(`
+      SELECT
+        cr.id,
+        cr.found_post_id,
+        cr.claimant_id,
+        cr.lost_post_id,
+        cr.claim_message,
+        cr.status,
+        cr.verified_by,
+        cr.verified_at,
+        cr.reject_reason,
+        cr.created_at,
+        fp.title AS found_title,
+        CONCAT(
+          l.name_th,
+          IF(l.floor IS NOT NULL AND l.floor <> '', CONCAT(' ຊັ້ນ ', l.floor), '')
+        ) AS location_name,
+        CONCAT(claimant.first_name, ' ', claimant.last_name) AS claimant_name,
+        claimant.username AS claimant_username,
+        claimant.email AS claimant_email
+      FROM claim_requests cr
+      INNER JOIN found_posts fp ON fp.id = cr.found_post_id
+      INNER JOIN members claimant ON claimant.id = cr.claimant_id
+      LEFT JOIN locations l ON l.id = fp.found_location_id
+      ORDER BY cr.created_at DESC
+    `);
+    return rows.map((row) => ({
+      id: row.id,
+      foundPostId: row.found_post_id,
+      claimantId: row.claimant_id,
+      lostPostId: row.lost_post_id,
+      claimMessage: row.claim_message,
+      status: row.status,
+      verifiedBy: row.verified_by,
+      verifiedAt: row.verified_at,
+      rejectReason: row.reject_reason ?? "",
+      createdAt: row.created_at,
+      foundTitle: row.found_title,
+      locationName: row.location_name ?? "ຫ້ອງຄຸ້ມຄອງ",
+      claimantName: row.claimant_name,
+      claimantUsername: row.claimant_username,
+      claimantEmail: row.claimant_email,
     }));
   },
   queryDemoUsers: async (db) => {
@@ -315,6 +363,7 @@ async function fetchLostPosts(db) {
       lp.lost_at AS lostAt,
       lp.contact_channel AS contactChannel,
       lp.status,
+      lp.reject_reason AS rejectReason,
       CONCAT(owner.first_name, ' ', owner.last_name) AS ownerName,
       (
         SELECT ii.image_url
@@ -362,7 +411,9 @@ async function attachPostImages(db, rows, postIdColumn) {
 }
 
 async function fetchMatches(db) {
-  const { calculateMatchScore } = await import("./services/weightedScoreMatching.js");
+  const { calculateMatchScore, rebuildAllMatches } = await import("./services/weightedScoreMatching.js");
+  await rebuildAllMatches(db);
+
   const [rows] = await db.query(`
     SELECT
       m.id,
@@ -407,11 +458,16 @@ async function fetchMatches(db) {
     INNER JOIN item_categories fc ON fc.id = fp.category_id
     LEFT JOIN locations ll ON ll.id = lp.lost_location_id
     LEFT JOIN locations fl ON fl.id = fp.found_location_id
+    WHERE lp.deleted_at IS NULL
+      AND fp.deleted_at IS NULL
+      AND lp.status IN ('pending_approval', 'published', 'matched')
+      AND fp.status IN ('approved', 'matched')
     ORDER BY m.match_score DESC
   `);
 
   return rows.map((row) => {
     const lost = {
+      title: row.lost_title,
       category_id: row.lost_category_id,
       lost_location_id: row.lost_location_id,
       lost_at: row.lost_at,
@@ -421,6 +477,7 @@ async function fetchMatches(db) {
       description: row.lost_description,
     };
     const found = {
+      title: row.found_title,
       category_id: row.found_category_id,
       found_location_id: row.found_location_id,
       found_at: row.found_at,

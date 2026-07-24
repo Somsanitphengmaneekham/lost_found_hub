@@ -82,6 +82,9 @@ export function mapLostFromApi(row) {
     brand: row.brand ?? "",
     uniqueMark: row.uniqueMark ?? "",
     status: row.status,
+    rejectReason: row.rejectReason ?? "",
+    createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : "",
+    updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : "",
     image: images[0]?.src || imageForCategory(row.categoryName),
     images,
   };

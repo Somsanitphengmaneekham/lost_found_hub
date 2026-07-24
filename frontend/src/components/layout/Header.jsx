@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart3,
   Bell,
+  ClipboardList,
   Database,
   FileBarChart2,
   FileQuestion,
@@ -29,11 +30,13 @@ function activeHrefFromHash(hash) {
 export function Header({ currentUser, notificationCount = 0, onLogout }) {
   const [activeHref, setActiveHref] = useState(() => activeHrefFromHash(window.location.hash));
   const isTeacher = currentUser?.role === "teacher";
+  const isStudent = currentUser?.role === "student";
   const safeAvatarUrl = currentUser && isAllowedImageUrl(currentUser.avatarUrl) ? currentUser.avatarUrl : "";
   const nav = currentUser
     ? [
         { label: "ໜ້າຫຼັກ", href: "#home", icon: Inbox },
         { label: "ແດຊບອດ", href: "#dashboard", icon: BarChart3 },
+        ...(isStudent ? [{ label: "ລາຍການຂອງຂ້ອຍ", href: "#my-items", icon: ClipboardList }] : []),
         { label: "ລາຍງານ", href: "#reports", icon: FileBarChart2 },
         { label: "ແຈ້ງພົບຂອງ", href: "#found-form", icon: PackageCheck },
         { label: "ແຈ້ງຂອງສູນຫາຍ", href: "#lost-form", icon: FileQuestion },

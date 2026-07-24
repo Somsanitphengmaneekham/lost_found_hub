@@ -2,6 +2,7 @@ import {
   BarChart3,
   CalendarDays,
   ClipboardCheck,
+  Download,
   FileQuestion,
   GitCompare,
   Inbox,
@@ -19,6 +20,7 @@ import {
   lostStatusLabel,
   roleLabel,
 } from "../utils/ui.js";
+import { exportExcelWorkbook } from "../utils/excelExport.js";
 
 const OPEN_FOUND_STATUSES = new Set(["awaiting_handover", "pending_approval", "approved", "matched"]);
 const OPEN_LOST_STATUSES = new Set(["draft", "pending_approval", "published", "matched"]);
@@ -114,13 +116,18 @@ function returnBelongsToUser(record, user, myFoundIds) {
   return record.receivedBy === user.username || record.receivedBy === user.fullName || myFoundIds.has(Number(record.foundPostId));
 }
 
-function reportScope({ currentUser, foundItems, lostReports, matches, returnRecords }) {
+function claimBelongsToUser(claim, user) {
+  return Number(claim.claimantId) === Number(user.id);
+}
+
+function reportScope({ currentUser, foundItems, lostReports, matches, returnRecords, claimRequests = [] }) {
   if (currentUser.role === "teacher") {
     return {
       foundItems,
       lostReports,
       matches,
       returnRecords,
+      claimRequests,
     };
   }
 
@@ -134,10 +141,200 @@ function reportScope({ currentUser, foundItems, lostReports, matches, returnReco
     lostReports: scopedLostReports,
     matches: matches.filter((match) => matchBelongsToUser(match, currentUser, myLostIds)),
     returnRecords: returnRecords.filter((record) => returnBelongsToUser(record, currentUser, myFoundIds)),
+    claimRequests: claimRequests.filter((claim) => claimBelongsToUser(claim, currentUser)),
   };
 }
 
-export function ReportsPage({ currentUser, foundItems, lostReports, matches, members, returnRecords }) {
+function claimStatusLabel(status) {
+  const labels = {
+    submitted: "ສົ່ງຄຳຂໍແລ້ວ",
+    under_review: "ກຳລັງກວດສອບ",
+    approved: "ອະນຸມັດ",
+    rejected: "ປະຕິເສດ",
+    returned: "ຮັບຂອງແລ້ວ",
+  };
+  return labels[status] ?? status ?? "-";
+}
+
+function postStatusLabel(item, type) {
+  return type === "lost" ? lostStatusLabel(item.status) : safeFoundStatus(item.status).label;
+}
+
+function dateText(value) {
+  return formatLaoDateTime(value);
+}
+
+function fileDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function metricRows(metrics) {
+  return metrics.map((metric) => ({
+    "ຫົວຂໍ້": metric.label,
+    "ຈຳນວນ": Number(metric.value ?? 0),
+  }));
+}
+
+function foundPostRows(items) {
+  return sortRecent(items).map((item) => ({
+    ID: item.id,
+    "ຊື່ສິ່ງຂອງ": item.title,
+    "ໝວດໝູ່": item.category,
+    "ສະຖານທີ່ພົບ": item.location,
+    "ວັນເວລາພົບ": dateText(item.foundAt),
+    "ສີ": item.color,
+    "ຍີ່ຫໍ້": item.brand,
+    "ຈຸດສັງເກດ": item.uniqueMark,
+    "ລາຍລະອຽດ": item.description,
+    "ຜູ້ແຈ້ງພົບ": item.finder,
+    "ຕິດຕໍ່": item.contact,
+    "ສະຖານະ": postStatusLabel(item, "found"),
+    "ວັນເວລາອະນຸມັດ": dateText(item.approvedAt),
+    "ເຫດຜົນປະຕິເສດ": item.rejectReason,
+  }));
+}
+
+function lostPostRows(items) {
+  return sortRecent(items).map((item) => ({
+    ID: item.id,
+    "ຊື່ສິ່ງຂອງ": item.title,
+    "ໝວດໝູ່": item.category,
+    "ສະຖານທີ່ສູນຫາຍ": item.location,
+    "ວັນເວລາສູນຫາຍ": dateText(item.lostAt),
+    "ສີ": item.color,
+    "ຍີ່ຫໍ້": item.brand,
+    "ຈຸດສັງເກດ": item.uniqueMark,
+    "ລາຍລະອຽດ": item.description,
+    "ເຈົ້າຂອງ": item.owner,
+    "ຕິດຕໍ່": item.contact,
+    "ສະຖານະ": postStatusLabel(item, "lost"),
+    "ເຫດຜົນປະຕິເສດ": item.rejectReason,
+  }));
+}
+
+function approvalRows(foundItems, lostReports) {
+  return sortRecent([
+    ...foundItems.map((item) => ({ ...item, reportKind: "ພົບສິ່ງຂອງ", eventAt: item.foundAt })),
+    ...lostReports.map((item) => ({ ...item, reportKind: "ສູນຫາຍ", eventAt: item.lostAt })),
+  ]).map((item) => ({
+    ID: item.id,
+    "ປະເພດລາຍງານ": item.reportKind,
+    "ຊື່ສິ່ງຂອງ": item.title,
+    "ໝວດໝູ່": item.category,
+    "ສະຖານທີ່": item.location,
+    "ວັນເວລາ": dateText(item.eventAt),
+    "ຜູ້ແຈ້ງ": item.finder || item.owner,
+    "ສະຖານະ": item.reportKind === "ສູນຫາຍ" ? lostStatusLabel(item.status) : safeFoundStatus(item.status).label,
+    "ເຫດຜົນປະຕິເສດ": item.rejectReason,
+  }));
+}
+
+function matchRows(items) {
+  return sortRecent(items).map((match) => ({
+    ID: match.id,
+    "ຄະແນນໃກ້ຄຽງ": Number(match.matchScore ?? 0),
+    "ສິ່ງຂອງສູນຫາຍ": match.lost?.title ?? "",
+    "ສະຖານທີ່ສູນຫາຍ": match.lost?.location ?? "",
+    "ສິ່ງຂອງທີ່ພົບ": match.found?.title ?? "",
+    "ສະຖານທີ່ພົບ": match.found?.location ?? "",
+    "ສະຖານະ": match.status ?? "",
+    "ວັນເວລາຄຳນວນ": dateText(match.createdAt),
+  }));
+}
+
+function returnRecordRows(items) {
+  return sortRecent(items).map((record) => ({
+    ID: record.id,
+    "ເລກຄຳຂໍ": record.claimRequestId,
+    "Found Post ID": record.foundPostId,
+    "Lost Post ID": record.lostPostId ?? "",
+    "ຜູ້ດຳເນີນການຄືນ": record.returnedBy,
+    "ຜູ້ຮັບຂອງ": record.receivedBy,
+    "ສະຖານທີ່ຄືນ": record.returnLocation,
+    "ວັນເວລາຄືນ": dateText(record.returnedAt),
+  }));
+}
+
+function claimRequestRows(items) {
+  return sortRecent(items).map((claim) => ({
+    ID: claim.id,
+    "ສິ່ງຂອງທີ່ຂໍຮັບ": claim.foundTitle,
+    "ສະຖານທີ່": claim.locationName,
+    "ຜູ້ຂໍຮັບ": claim.claimantName,
+    Username: claim.claimantUsername,
+    Email: claim.claimantEmail,
+    "ຂໍ້ຄວາມຄຳຂໍ": claim.claimMessage,
+    "ສະຖານະ": claimStatusLabel(claim.status),
+    "ຜູ້ກວດສອບ": claim.verifiedBy ?? "",
+    "ວັນເວລາກວດສອບ": dateText(claim.verifiedAt),
+    "ເຫດຜົນປະຕິເສດ": claim.rejectReason,
+    "ວັນເວລາຂໍຮັບ": dateText(claim.createdAt),
+  }));
+}
+
+function userRows(members) {
+  return members.map((member) => ({
+    ID: member.id,
+    Role: roleLabel(member.role),
+    Username: member.username,
+    "ຊື່-ນາມສະກຸນ": member.fullName,
+    "ລະຫັດນັກສຶກສາ": member.studentCode,
+    "ລະຫັດພະນັກງານ": member.employeeCode,
+    Email: member.email,
+    "ເບີໂທ": member.phone,
+    "ພາກວິຊາ": member.department,
+    "ຢືນຢັນຕົວຕົນ": member.identityStatus,
+    "ສະຖານະບັນຊີ": member.isActive === false ? "ປິດໃຊ້ງານ" : "ໃຊ້ງານ",
+  }));
+}
+
+function rowsToSheet(name, rows, fallbackColumns) {
+  const columns = rows[0] ? Object.keys(rows[0]) : fallbackColumns;
+  return { name, columns, rows };
+}
+
+function buildReportWorkbook({ currentUser, isTeacher, scoped, members, metrics }) {
+  const summaryRows = [
+    { "ຫົວຂໍ້": "ຜູ້ Export", "ຂໍ້ມູນ": currentUser.fullName || currentUser.username },
+    { "ຫົວຂໍ້": "Role", "ຂໍ້ມູນ": roleLabel(currentUser.role) },
+    { "ຫົວຂໍ້": "ວັນເວລາ Export", "ຂໍ້ມູນ": dateText(new Date().toISOString()) },
+    ...metricRows(metrics).map((row) => ({ "ຫົວຂໍ້": row["ຫົວຂໍ້"], "ຂໍ້ມູນ": row["ຈຳນວນ"] })),
+  ];
+
+  const sheets = [
+    rowsToSheet("Summary", summaryRows, ["ຫົວຂໍ້", "ຂໍ້ມູນ"]),
+    rowsToSheet(isTeacher ? "Found Posts" : "My Found Posts", foundPostRows(scoped.foundItems), [
+      "ID", "ຊື່ສິ່ງຂອງ", "ໝວດໝູ່", "ສະຖານທີ່ພົບ", "ສະຖານະ",
+    ]),
+    rowsToSheet(isTeacher ? "Lost Posts" : "My Lost Posts", lostPostRows(scoped.lostReports), [
+      "ID", "ຊື່ສິ່ງຂອງ", "ໝວດໝູ່", "ສະຖານທີ່ສູນຫາຍ", "ສະຖານະ",
+    ]),
+    rowsToSheet("Similar Items", matchRows(scoped.matches), [
+      "ID", "ຄະແນນໃກ້ຄຽງ", "ສິ່ງຂອງສູນຫາຍ", "ສິ່ງຂອງທີ່ພົບ",
+    ]),
+    rowsToSheet(isTeacher ? "Claim Requests" : "My Claims", claimRequestRows(scoped.claimRequests), [
+      "ID", "ສິ່ງຂອງທີ່ຂໍຮັບ", "ຜູ້ຂໍຮັບ", "ສະຖານະ",
+    ]),
+    rowsToSheet("Return Records", returnRecordRows(scoped.returnRecords), [
+      "ID", "ເລກຄຳຂໍ", "Found Post ID", "ຜູ້ຮັບຂອງ", "ວັນເວລາຄືນ",
+    ]),
+  ];
+
+  if (isTeacher) {
+    sheets.splice(
+      3,
+      0,
+      rowsToSheet("Approval", approvalRows(scoped.foundItems, scoped.lostReports), [
+        "ID", "ປະເພດລາຍງານ", "ຊື່ສິ່ງຂອງ", "ສະຖານະ",
+      ]),
+    );
+    sheets.push(rowsToSheet("Users", userRows(members), ["ID", "Role", "Username", "ຊື່-ນາມສະກຸນ", "ສະຖານະບັນຊີ"]));
+  }
+
+  return sheets;
+}
+
+export function ReportsPage({ currentUser, foundItems, lostReports, matches, members, returnRecords, claimRequests = [] }) {
   const isTeacher = currentUser.role === "teacher";
   const recommendationMatches = matches.filter((match) => match.status !== "rejected");
   const scoped = reportScope({
@@ -146,6 +343,7 @@ export function ReportsPage({ currentUser, foundItems, lostReports, matches, mem
     lostReports,
     matches: recommendationMatches,
     returnRecords,
+    claimRequests,
   });
   const openFoundCount = scoped.foundItems.filter((item) => OPEN_FOUND_STATUSES.has(item.status)).length;
   const openLostCount = scoped.lostReports.filter((item) => OPEN_LOST_STATUSES.has(item.status)).length;
@@ -182,6 +380,21 @@ export function ReportsPage({ currentUser, foundItems, lostReports, matches, mem
         { label: "ຄືນສີ່ງຂອງແລ້ວ", value: scoped.returnRecords.length, icon: ClipboardCheck, tone: "slate" },
       ];
 
+  const exportSheets = buildReportWorkbook({
+    currentUser,
+    isTeacher,
+    scoped,
+    members,
+    metrics,
+  });
+
+  function handleExportExcel() {
+    exportExcelWorkbook({
+      fileName: `lost-found-${isTeacher ? "teacher" : "student"}-report-${fileDate()}`,
+      sheets: exportSheets,
+    });
+  }
+
   return (
     <section className="reports-page" id="reports" aria-labelledby="reports-title">
       <div className="reports-hero">
@@ -191,13 +404,19 @@ export function ReportsPage({ currentUser, foundItems, lostReports, matches, mem
           <p>
             {isTeacher
               ? "ສະຫຼຸບພາບລວມທັງລະບົບ ເພື່ອໃຫ້ອາຈານກວດວຽກ, ຕິດຕາມການຄືນສີ່ງຂອງ ແລະ ເບິ່ງສະຖິຕິຕາມປະເພດ/ສະຖານທີ່"
-              : "ສະຫຼຸບສະຖານະສີ່ງຂອງລາຍການທີ່ເຈົ້າແຈ້ງໄວ້ ພ້ອມ Match ແລະ ການຄືນສີ່ງຂອງທີ່ກ່ຽວຂ້ອງ"}
+              : "ສະຫຼຸບສະຖານະສີ່ງຂອງລາຍການທີ່ເຈົ້າແຈ້ງໄວ້ ພ້ອມລາຍການໃກ້ຄຽງ ແລະ ການຄືນສີ່ງຂອງທີ່ກ່ຽວຂ້ອງ"}
           </p>
         </div>
-        <div className="reports-hero-card">
+        <div className="reports-hero-actions">
+          <div className="reports-hero-card">
           <TrendingUp size={22} />
           <span>{isTeacher ? "ຂໍ້ມູນລະດັບລະບົບ" : "ຂໍ້ມູນສ່ວນຕົວ"}</span>
           <strong>{numberText(scoped.foundItems.length + scoped.lostReports.length)} ລາຍການ</strong>
+          </div>
+          <button className="reports-export-button" type="button" onClick={handleExportExcel}>
+            <Download size={18} />
+            ດາວໂຫຼດ Excel
+          </button>
         </div>
       </div>
 
@@ -245,7 +464,7 @@ export function ReportsPage({ currentUser, foundItems, lostReports, matches, mem
       </div>
 
       <div className="reports-bottom-grid">
-        <ReportPanel icon={GitCompare} title="Match ລ່າສຸດ">
+        <ReportPanel icon={GitCompare} title="ລາຍການໃກ້ຄຽງລ່າສຸດ">
           {latestMatches.length ? (
             <div className="reports-list">
               {latestMatches.map((match) => (
@@ -253,7 +472,7 @@ export function ReportsPage({ currentUser, foundItems, lostReports, matches, mem
               ))}
             </div>
           ) : (
-            <EmptyState title="ຍັງບໍ່ມີ Match" description="ເມື່ອ Weighted Matching ຄະແນນສູງພໍ ລາຍການຈະມາສະແດງຢູ່ນີ້" />
+            <EmptyState title="ຍັງບໍ່ມີລາຍການໃກ້ຄຽງ" description="ເມື່ອຄະແນນຄວາມຄ້າຍຄືສູງພໍ ລາຍການຈະມາສະແດງຢູ່ນີ້" />
           )}
         </ReportPanel>
 

@@ -1,7 +1,18 @@
 export function registerBootstrapRoutes(app, pool, loaders) {
   app.get("/api/bootstrap", async (_req, res, next) => {
     try {
-      const [categories, locations, departments, foundPosts, lostPosts, matches, returnRecords, demoUsers, members] =
+      const [
+        categories,
+        locations,
+        departments,
+        foundPosts,
+        lostPosts,
+        matches,
+        returnRecords,
+        claimRequests,
+        demoUsers,
+        members,
+      ] =
         await Promise.all([
           loaders.queryCategories(pool),
           loaders.queryLocations(pool),
@@ -10,6 +21,7 @@ export function registerBootstrapRoutes(app, pool, loaders) {
           loaders.queryLostPosts(pool),
           loaders.queryMatches(pool),
           loaders.queryReturnRecords(pool),
+          loaders.queryClaimRequests ? loaders.queryClaimRequests(pool) : [],
           loaders.queryDemoUsers(pool),
           loaders.queryMembers ? loaders.queryMembers(pool) : loaders.queryDemoUsers(pool),
         ]);
@@ -22,6 +34,7 @@ export function registerBootstrapRoutes(app, pool, loaders) {
         lostPosts,
         matches,
         returnRecords,
+        claimRequests,
         demoUsers,
         members,
       });

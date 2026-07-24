@@ -18,6 +18,33 @@ const MAX_LOCAL_MEMBER_IMAGE_LENGTH = 260_000;
 const MAX_LOCAL_POSTS_WITH_IMAGES = 12;
 const OWNER_EDITABLE_FOUND_STATUSES = new Set(["awaiting_handover", "pending_approval", "rejected"]);
 const OWNER_EDITABLE_LOST_STATUSES = new Set(["pending_approval", "rejected"]);
+const GENERIC_ITEM_WORDS = new Set([
+  "usb",
+  "type",
+  "typec",
+  "type-c",
+  "black",
+  "white",
+  "silver",
+  "gold",
+  "lost",
+  "found",
+  "item",
+  "ສີ",
+  "ດຳ",
+  "ດໍາ",
+  "ຂາວ",
+  "ເງິນ",
+  "ຄຳ",
+  "ຄໍາ",
+  "ພົບ",
+  "ເກັບ",
+  "ສູນຫາຍ",
+  "ຫາຍ",
+  "ສີດຳ",
+  "ສີດໍາ",
+  "ສີຂາວ",
+]);
 
 let memoryState = createInitialState();
 
@@ -35,6 +62,7 @@ function createInitialState() {
     lostPosts: clone(lostSeed),
     matches: clone(matchSeed),
     returnRecords: [],
+    claimRequests: [],
   };
 
   return {
@@ -48,6 +76,7 @@ function createInitialState() {
       lostPosts: nextId(seed.lostPosts),
       matches: nextId(seed.matches),
       returnRecords: 1,
+      claimRequests: 1,
     },
   };
 }
@@ -66,7 +95,17 @@ function readState() {
       return memoryState;
     }
 
-    memoryState = { ...createInitialState(), ...JSON.parse(raw) };
+    const initialState = createInitialState();
+    const storedState = JSON.parse(raw);
+    memoryState = {
+      ...initialState,
+      ...storedState,
+      claimRequests: storedState.claimRequests ?? initialState.claimRequests,
+      nextIds: {
+        ...initialState.nextIds,
+        ...(storedState.nextIds ?? {}),
+      },
+    };
     return memoryState;
   } catch {
     return memoryState;
@@ -342,6 +381,7 @@ function foundRows(state) {
         status: item.status,
         approvedBy: item.approvedBy ?? "",
         approvedAt: item.approvedAt ?? "",
+        rejectReason: item.rejectReason ?? "",
         finderName: item.finder || finder?.fullName || "",
         imageUrl: item.images?.[0]?.src ?? "",
         imageUrls: item.images?.map((image) => image.src).filter(Boolean) ?? [],
@@ -372,6 +412,7 @@ function lostRows(state) {
         contactName: item.owner,
         contactChannel: item.contact,
         status: item.status,
+        rejectReason: item.rejectReason ?? "",
         ownerName: item.owner || owner?.fullName || "",
         imageUrl: item.images?.[0]?.src ?? "",
         imageUrls: item.images?.map((image) => image.src).filter(Boolean) ?? [],
@@ -421,11 +462,39 @@ function returnRows(state) {
     id: item.id,
     claimRequestId: item.claimRequestId,
     foundPostId: item.foundPostId,
+    lostPostId: item.lostPostId,
     returnedBy: item.returnedBy,
     receivedBy: item.receivedBy,
     returnLocation: item.returnLocation,
     returnedAt: item.returnedAt,
   }));
+}
+
+function claimRows(state) {
+  return (state.claimRequests ?? [])
+    .map((item) => {
+      const found = state.foundPosts.find((post) => Number(post.id) === Number(item.foundPostId));
+      const claimant = memberById(state, item.claimantId);
+
+      return {
+        id: item.id,
+        foundPostId: item.foundPostId,
+        claimantId: item.claimantId,
+        lostPostId: item.lostPostId ?? null,
+        claimMessage: item.claimMessage,
+        status: item.status,
+        verifiedBy: item.verifiedBy ?? null,
+        verifiedAt: item.verifiedAt ?? null,
+        rejectReason: item.rejectReason ?? "",
+        createdAt: item.createdAt,
+        foundTitle: found?.title ?? "ສິ່ງຂອງທີ່ພົບ",
+        locationName: found?.location ?? "ຫ້ອງຄຸ້ມຄອງ",
+        claimantName: claimant?.fullName ?? claimant?.username ?? "ນັກສຶກສາ",
+        claimantUsername: claimant?.username ?? "",
+        claimantEmail: claimant?.email ?? "",
+      };
+    })
+    .sort((a, b) => Number(new Date(b.createdAt || 0)) - Number(new Date(a.createdAt || 0)));
 }
 
 function bootstrapPayload(state) {
@@ -437,6 +506,7 @@ function bootstrapPayload(state) {
     lostPosts: lostRows(state),
     matches: matchRows(state),
     returnRecords: returnRows(state),
+    claimRequests: claimRows(state),
     demoUsers: state.members.map(publicMember),
     members: state.members.map(publicMember),
     localMode: true,
@@ -452,10 +522,33 @@ function sameDayDiff(left, right) {
 }
 
 function textLooksRelated(left, right) {
-  const leftText = lower(left);
-  const rightText = lower(right);
-  if (!leftText || !rightText) return false;
-  return leftText.includes(rightText) || rightText.includes(leftText);
+  const leftWords = significantWords(left);
+  const rightWords = significantWords(right);
+  if (!leftWords.length || !rightWords.length) return false;
+
+  const rightSet = new Set(rightWords);
+  return leftWords.some((leftWord) => {
+    if (rightSet.has(leftWord)) return true;
+
+    return rightWords.some((rightWord) => {
+      if (leftWord.length < 4 || rightWord.length < 4) return false;
+      return leftWord.includes(rightWord) || rightWord.includes(leftWord);
+    });
+  });
+}
+
+function significantWords(value) {
+  return lower(value)
+    .replace(/\s+/g, " ")
+    .split(/[^\p{L}\p{N}+#.-]+/u)
+    .map((word) => word.replace(/^[-_.]+|[-_.]+$/g, ""))
+    .filter((word) => word.length >= 2 && !GENERIC_ITEM_WORDS.has(word));
+}
+
+function hasItemIdentityOverlap(lost, found) {
+  const lostText = `${lost.title ?? ""} ${lost.brand ?? ""} ${lost.uniqueMark ?? ""} ${lost.description ?? ""}`;
+  const foundText = `${found.title ?? ""} ${found.brand ?? ""} ${found.uniqueMark ?? ""} ${found.description ?? ""}`;
+  return textLooksRelated(lostText, foundText);
 }
 
 function calculateMatchScore(lost, found) {
@@ -473,19 +566,21 @@ function calculateMatchScore(lost, found) {
   }
 
   if (sameDayDiff(lost.lostAt, found.foundAt) <= 3) {
-    score += 15;
-    reasons.push({ label: "ວັນທີ່ໃກ້ກັນບໍ່ເກີນ 3 ວັນ", points: 15 });
+    score += 20;
+    reasons.push({ label: "ວັນທີ່ໃກ້ກັນບໍ່ເກີນ 3 ວັນ", points: 20 });
   }
 
+  const sameColor = lost.color && found.color && lower(lost.color) === lower(found.color);
   const detailMatched =
-    (lost.color && found.color && lower(lost.color) === lower(found.color)) ||
-    (lost.brand && found.brand && lower(lost.brand) === lower(found.brand)) ||
+    (lost.brand && found.brand && textLooksRelated(lost.brand, found.brand)) ||
+    textLooksRelated(lost.title, found.title) ||
     textLooksRelated(lost.uniqueMark, found.uniqueMark) ||
-    textLooksRelated(lost.description, found.description);
+    textLooksRelated(lost.description, found.description) ||
+    (sameColor && hasItemIdentityOverlap(lost, found));
 
   if (detailMatched) {
-    score += 20;
-    reasons.push({ label: "ສີ ຫຼື ລາຍລະອຽດໃກ້ຄຽງກັນ", points: 20 });
+    score += 15;
+    reasons.push({ label: "ສີ ຫຼື ລາຍລະອຽດໃກ້ຄຽງກັນ", points: 15 });
   }
 
   return { score, reasons };
@@ -526,7 +621,7 @@ function generateMatchesForLost(state, lost) {
     (match) => match.lostPostId !== lost.id || match.status !== "suggested",
   );
   state.foundPosts
-    .filter((found) => !found.deletedAt && found.status === "approved" && found.category === lost.category)
+    .filter((found) => !found.deletedAt && ["approved", "matched"].includes(found.status) && found.category === lost.category)
     .forEach((found) => {
       if (upsertMatch(state, lost, found)) count += 1;
     });
@@ -536,7 +631,7 @@ function generateMatchesForLost(state, lost) {
 function generateMatchesForFound(state, found) {
   let count = 0;
   state.lostPosts
-    .filter((lost) => !lost.deletedAt && lost.status === "published" && lost.category === found.category)
+    .filter((lost) => !lost.deletedAt && ["pending_approval", "published", "matched"].includes(lost.status) && lost.category === found.category)
     .forEach((lost) => {
       if (upsertMatch(state, lost, found)) count += 1;
     });
@@ -1008,6 +1103,7 @@ export function localUpdateFoundPost(id, body) {
     status: body.status ?? item.status,
     images: body.imageUrls !== undefined ? imagesFromUrls(body.imageUrls) : item.images,
   });
+  if (item.status === "pending_approval") item.rejectReason = "";
   if (item.status === "approved") generateMatchesForFound(state, item);
   writeState(state);
   return foundRows(state).find((row) => row.id === item.id);
@@ -1017,8 +1113,69 @@ export function localMoveFoundToApproval(id) {
   const state = readState();
   const item = findById(state.foundPosts, id, "ປະກາດພົບຂອງ");
   item.status = "pending_approval";
+  item.rejectReason = "";
   writeState(state);
   return foundRows(state).find((row) => row.id === item.id);
+}
+
+export function localClaimFoundPost(id, body) {
+  const state = readState();
+  const found = findById(state.foundPosts, id, "ປະກາດພົບຂອງ");
+  const claimant = activeActorById(state, body.claimantMemberId ?? body.claimantId);
+
+  if (claimant.role !== "student") {
+    throw localError("ຕ້ອງເຂົ້າລະບົບເປັນນັກສຶກສາກ່ອນຂໍຮັບສິ່ງຂອງ", 403);
+  }
+
+  if (!receiverName) {
+    throw localError("Receiver name is required", 400);
+  }
+  if (!receiverStudentCode && !receiverPhone) {
+    throw localError("Receiver student code or phone is required", 400);
+  }
+  if (!["approved", "matched"].includes(found.status)) {
+    throw localError("ສາມາດຂໍຮັບໄດ້ສະເພາະລາຍການທີ່ປະກາດແລ້ວ", 409);
+  }
+
+  if (Number(found.finderId) === Number(claimant.id)) {
+    throw localError("ຜູ້ແຈ້ງພົບບໍ່ສາມາດຂໍຮັບລາຍການຂອງຕົນເອງ", 409);
+  }
+
+  const duplicate = (state.claimRequests ?? []).some(
+    (claim) =>
+      Number(claim.foundPostId) === Number(found.id) &&
+      Number(claim.claimantId) === Number(claimant.id) &&
+      ["submitted", "under_review", "approved"].includes(claim.status),
+  );
+
+  if (duplicate) {
+    throw localError("ທ່ານໄດ້ສົ່ງຄຳຂໍຮັບລາຍການນີ້ແລ້ວ", 409);
+  }
+
+  const matchedLost = state.matches
+    .filter((match) => Number(match.foundPostId) === Number(found.id))
+    .map((match) => ({
+      match,
+      lost: state.lostPosts.find((lost) => Number(lost.id) === Number(match.lostPostId)),
+    }))
+    .filter(({ lost }) => Number(lost?.ownerId) === Number(claimant.id))
+    .sort((left, right) => Number(right.match.matchScore) - Number(left.match.matchScore))[0]?.lost;
+
+  const claim = {
+    id: state.nextIds.claimRequests++,
+    foundPostId: found.id,
+    claimantId: claimant.id,
+    lostPostId: matchedLost?.id ?? null,
+    claimMessage:
+      normalize(body.claimMessage) ||
+      "ນັກສຶກສາກົດຂໍຮັບສິ່ງຂອງ ແລະ ຈະໄປຢືນຢັນຕົວຕົນທີ່ຫ້ອງຄຸ້ມຄອງ",
+    status: "submitted",
+    createdAt: new Date().toISOString(),
+  };
+
+  state.claimRequests.unshift(claim);
+  writeState(state);
+  return claimRows(state).find((row) => row.id === claim.id);
 }
 
 export function localApproveFoundPost(id, approvedByMemberId) {
@@ -1033,10 +1190,18 @@ export function localApproveFoundPost(id, approvedByMemberId) {
   return { ...foundRows(state).find((row) => row.id === item.id), matchCount };
 }
 
-export function localRejectFoundPost(id) {
+function requireLocalRejectReason(reason) {
+  const rejectReason = normalize(reason);
+  if (!rejectReason) throw localError("ກະລຸນາລະບຸເຫດຜົນກ່ອນປະຕິເສດປະກາດ", 400);
+  if (rejectReason.length > 1000) throw localError("ເຫດຜົນການປະຕິເສດຍາວເກີນໄປ", 400);
+  return rejectReason;
+}
+
+export function localRejectFoundPost(id, reason) {
   const state = readState();
   const item = findById(state.foundPosts, id, "ປະກາດພົບຂອງ");
   item.status = "rejected";
+  item.rejectReason = requireLocalRejectReason(reason);
   writeState(state);
   return foundRows(state).find((row) => row.id === item.id);
 }
@@ -1100,6 +1265,7 @@ export function localUpdateLostPost(id, body) {
     status: body.status ?? item.status,
     images: body.imageUrls !== undefined ? imagesFromUrls(body.imageUrls) : item.images,
   });
+  if (item.status === "pending_approval") item.rejectReason = "";
   generateMatchesForLost(state, item);
   writeState(state);
   return lostRows(state).find((row) => row.id === item.id);
@@ -1114,10 +1280,25 @@ export function localApproveLostPost(id) {
   return { ...lostRows(state).find((row) => row.id === item.id), matchCount };
 }
 
-export function localRejectLostPost(id) {
+export function localMarkLostPostFound(id, markedByMemberId) {
+  const state = readState();
+  const item = findById(state.lostPosts, id, "ປະກາດຂອງສູນຫາຍ");
+  const teacher = activeActorById(state, markedByMemberId);
+  if (teacher.role !== "teacher") throw localError("marking lost posts as found requires an active teacher account", 403);
+  if (!["published", "matched"].includes(item.status)) {
+    throw localError("ຕ້ອງອະນຸມັດປະກາດກ່ອນ ຈຶ່ງປ່ຽນເປັນພົບຂອງແລ້ວໄດ້", 409);
+  }
+  item.status = "matched";
+  const matchCount = generateMatchesForLost(state, item);
+  writeState(state);
+  return { ...lostRows(state).find((row) => row.id === item.id), matchCount };
+}
+
+export function localRejectLostPost(id, reason) {
   const state = readState();
   const item = findById(state.lostPosts, id, "ປະກາດຂອງສູນຫາຍ");
   item.status = "rejected";
+  item.rejectReason = requireLocalRejectReason(reason);
   state.matches = state.matches.filter((match) => match.lostPostId !== item.id);
   writeState(state);
   return lostRows(state).find((row) => row.id === item.id);
@@ -1172,6 +1353,7 @@ export function localReturnMatchedItem(id, body) {
     id: state.nextIds.returnRecords++,
     claimRequestId: `CR-${match.id}`,
     foundPostId: found.id,
+    lostPostId: lost.id,
     returnedBy: teacher?.username ?? "teacher01",
     receivedBy: receiver?.username ?? lost.owner,
     returnLocation: body.returnLocationName || "ຫ້ອງຄຸ້ມຄອງ",
@@ -1181,6 +1363,11 @@ export function localReturnMatchedItem(id, body) {
   found.status = "returned";
   lost.status = "closed";
   match.status = "confirmed";
+  state.matches = state.matches.filter(
+    (item) =>
+      Number(item.foundPostId) !== Number(found.id) &&
+      Number(item.lostPostId) !== Number(lost.id),
+  );
   writeState(state);
   return record;
 }
@@ -1189,14 +1376,35 @@ export function localReturnFoundPost(id, body) {
   const state = readState();
   const found = findById(state.foundPosts, id, "ປະກາດພົບຂອງ");
   const teacher = activeActorById(state, body.returnedByMemberId);
-  const receiver = memberById(state, body.receivedByMemberId);
+  const receiver = body.receivedByMemberId ? memberById(state, body.receivedByMemberId) : null;
+  const receiverName = String(body.receiverName ?? "").trim();
+  const receiverStudentCode = String(body.receiverStudentCode ?? "").trim();
+  const receiverDepartment = String(body.receiverDepartment ?? "").trim();
+  const receiverPhone = String(body.receiverPhone ?? "").trim();
 
   if (teacher.role !== "teacher") throw localError("returning items requires an active teacher account", 403);
-  if (!receiver || receiver.role !== "student" || receiver.isActive === false) {
+  if (body.receivedByMemberId && (!receiver || receiver.role !== "student" || receiver.isActive === false)) {
     throw localError("ກະລຸນາເລືອກນັກສຶກສາຜູ້ຮັບຄືນທີ່ຍັງເປີດໃຊ້ງານ", 400);
   }
   if (!["approved", "matched"].includes(found.status)) {
     throw localError("ສາມາດບັນທຶກການຄືນໄດ້ສະເພາະລາຍການທີ່ອະນຸມັດແລ້ວ", 409);
+  }
+
+  const receiverType = body.receiverType === "representative" ? "representative" : "owner";
+  if (!body.receiverPhotoUrl) {
+    throw localError("ກະລຸນາອັບໂຫຼດຮູບຜູ້ຮັບພ້ອມສິ່ງຂອງ", 400);
+  }
+  if (!body.identityVerified) {
+    throw localError("ກະລຸນາຢືນຢັນການກວດບັດນັກສຶກສາ/ຂໍ້ມູນ", 400);
+  }
+  if (
+    receiverType === "representative" &&
+    (!body.representativeName?.trim() ||
+      !body.representativePhone?.trim() ||
+      !body.representativeRelation?.trim() ||
+      !body.authorizationImageUrl)
+  ) {
+    throw localError("ກະລຸນາກອກຂໍ້ມູນ ແລະ ແນບຫຼັກຖານຜູ້ຮັບແທນ", 400);
   }
 
   const matchingRow = state.matches
@@ -1205,23 +1413,76 @@ export function localReturnFoundPost(id, body) {
       match,
       lost: state.lostPosts.find((lost) => Number(lost.id) === Number(match.lostPostId)),
     }))
-    .filter(({ lost }) => Number(lost?.ownerId) === Number(receiver.id))
+    .filter(({ lost }) => receiver && Number(lost?.ownerId) === Number(receiver.id))
     .sort((left, right) => Number(right.match.matchScore) - Number(left.match.matchScore))[0];
+
+  let claim = receiver
+    ? (state.claimRequests ?? [])
+    .filter(
+      (item) =>
+        Number(item.foundPostId) === Number(found.id) &&
+        Number(item.claimantId) === Number(receiver.id) &&
+        ["submitted", "under_review", "approved"].includes(item.status),
+    )
+    .sort((left, right) => Number(new Date(right.createdAt || 0)) - Number(new Date(left.createdAt || 0)))[0]
+    : null;
+
+  if (claim) {
+    claim.status = "returned";
+    claim.lostPostId = matchingRow?.lost?.id ?? claim.lostPostId ?? null;
+    claim.verifiedBy = teacher.id;
+    claim.verifiedAt = new Date().toISOString();
+    claim.claimMessage = "ຢືນຢັນຮັບສິ່ງຂອງຄືນທີ່ຫ້ອງຄຸ້ມຄອງ";
+  } else if (receiver) {
+    claim = {
+      id: state.nextIds.claimRequests++,
+      foundPostId: found.id,
+      claimantId: receiver.id,
+      lostPostId: matchingRow?.lost?.id ?? null,
+      claimMessage: "ຢືນຢັນຮັບສິ່ງຂອງຄືນທີ່ຫ້ອງຄຸ້ມຄອງ",
+      status: "returned",
+      verifiedBy: teacher.id,
+      verifiedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+    state.claimRequests.unshift(claim);
+  }
 
   const recordId = state.nextIds.returnRecords++;
   const record = {
     id: recordId,
-    claimRequestId: `CR-DIRECT-${recordId}`,
+    claimRequestId: claim ? `CR-${claim.id}` : null,
     foundPostId: found.id,
+    lostPostId: matchingRow?.lost?.id ?? null,
     returnedBy: teacher.username,
-    receivedBy: receiver.username,
+    receivedBy: receiver?.username ?? receiverName,
     returnLocation: "ຫ້ອງຄຸ້ມຄອງ",
+    receiverType,
+    receiverPhotoUrl: body.receiverPhotoUrl,
+    receiverName: receiver
+      ? `${receiver.firstName ?? ""} ${receiver.lastName ?? ""}`.trim() || receiver.username
+      : receiverName,
+    receiverStudentCode: receiver?.studentCode ?? receiverStudentCode,
+    receiverDepartment: receiver?.department ?? receiverDepartment,
+    receiverPhone: receiver?.phone ?? receiverPhone,
+    identityVerified: true,
+    representativeName: body.representativeName ?? null,
+    representativePhone: body.representativePhone ?? null,
+    representativeRelation: body.representativeRelation ?? null,
+    authorizationNote: body.authorizationNote ?? null,
+    authorizationImageUrl: body.authorizationImageUrl ?? null,
+    note: body.note ?? "ຄືນສິ່ງຂອງທີ່ຫ້ອງຄຸ້ມຄອງ",
     returnedAt: new Date().toISOString(),
   };
 
   state.returnRecords.unshift(record);
   found.status = "returned";
   if (matchingRow?.lost) matchingRow.lost.status = "closed";
+  state.matches = state.matches.filter(
+    (item) =>
+      Number(item.foundPostId) !== Number(found.id) &&
+      Number(item.lostPostId) !== Number(matchingRow?.lost?.id),
+  );
   writeState(state);
   return { post: foundRows(state).find((item) => item.id === found.id), returnRecord: record };
 }

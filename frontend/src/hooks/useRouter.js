@@ -22,6 +22,7 @@ const STUDENT_PAGES = new Set([
   "matching",
   "profile",
 ]);
+const STUDENT_ONLY_PAGES = new Set(["my-items"]);
 const TEACHER_PAGES = new Set(["approval", "master-data"]);
 
 function pageFromHash(hash) {
@@ -38,6 +39,7 @@ function pageForRole(page, currentUser, canReview) {
     return PUBLIC_PAGES.has(page) ? page : "login";
   }
   if (page === "login") return "home";
+  if (STUDENT_ONLY_PAGES.has(page)) return currentUser.role === "student" ? page : "approval";
   if (STUDENT_PAGES.has(page)) return page;
   if (canReview && TEACHER_PAGES.has(page)) return page;
   return "home";

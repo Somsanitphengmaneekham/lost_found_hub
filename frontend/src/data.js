@@ -2,6 +2,7 @@ import airpodsImage from "./assets/airpods.svg";
 import keysImage from "./assets/keys.svg";
 import tumblerImage from "./assets/tumbler.svg";
 import walletImage from "./assets/wallet.svg";
+import { fnsLocationMasterSeed } from "./locationMasterData.js";
 
 export const categoryMasterSeed = [
   {
@@ -36,54 +37,7 @@ export const categoryMasterSeed = [
   },
 ];
 
-export const locationMasterSeed = [
-  {
-    id: 1,
-    name: "ຫ້ອງຄຸ້ມຄອງ",
-    building: "ຫ້ອງການຄະນະວິທະຍາສາດທໍາມະຊາດ",
-    floor: "1",
-    locationType: "handover",
-    detail: "ຈຸດຮັບຝາກ ແລະ ສົ່ງມອບສິ່ງຂອງ",
-    isActive: true,
-  },
-  {
-    id: 2,
-    name: "ຕຶກພາກວິຊາວິທະຍາສາດ",
-    building: "ພາກວິຊາວິທະຍາສາດ",
-    floor: "",
-    locationType: "both",
-    detail: "ບໍລິເວນຫ້ອງຮຽນ ຫ້ອງປະຕິບັດການ ແລະ ໂຖງທາງເດີນ",
-    isActive: true,
-  },
-  {
-    id: 3,
-    name: "ຕຶກພາກວິຊາຄະນິດສາດ",
-    building: "ພາກວິຊາຄະນິດສາດ",
-    floor: "",
-    locationType: "both",
-    detail: "ບໍລິເວນຫ້ອງຮຽນ ແລະ ໂຖງທາງເດີນ",
-    isActive: true,
-  },
-  {
-    id: 4,
-    name: "ຕຶກພາກວິຊາຟີຊິກ ແລະ ເຄມີ",
-    building: "ພາກວິຊາຟີຊິກ ແລະ ເຄມີ",
-    floor: "",
-    locationType: "both",
-    detail: "ບໍລິເວນຫ້ອງຮຽນ ຫ້ອງທົດລອງ ແລະ ໂຖງທາງເດີນ",
-    isActive: true,
-  },
-  {
-    id: 5,
-    name: "ລານກາງຄະນະ",
-    building: "ຄະນະວິທະຍາສາດທໍາມະຊາດ",
-    floor: "",
-    locationType: "both",
-    detail: "ພື້ນທີ່ພັກນັກສຶກສາ ແລະ ທາງເຊື່ອມລະຫວ່າງຕຶກ",
-    isActive: true,
-  },
-];
-
+export const locationMasterSeed = fnsLocationMasterSeed;
 export const departmentMasterSeed = [
   { id: 1, code: "SCI", name: "ພາກວິຊາວິທະຍາສາດ", nameEn: "Science", isActive: true },
   { id: 2, code: "MATH", name: "ພາກວິຊາຄະນິດສາດ", nameEn: "Mathematics", isActive: true },

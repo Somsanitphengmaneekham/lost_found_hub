@@ -3,6 +3,7 @@ import {
   approveLostPost,
   createLostPost,
   deleteLostPost,
+  markLostPostFound,
   rejectLostPost,
   updateLostPost,
   uploadPostImages,
@@ -22,10 +23,12 @@ export const lostInitial = {
   brand: "",
   uniqueMark: "",
   images: [],
+  noImage: false,
 };
 
-function reportImageValidationMessage(images) {
+function reportImageValidationMessage(images, noImage) {
   const imageCount = Array.isArray(images) ? images.length : 0;
+  if (noImage && imageCount === 0) return "";
   if (imageCount < 1) return "ກະລຸນາອັບໂຫຼດຮູບຢ່າງໜ້ອຍ 1 ຮູບ";
   if (imageCount > MAX_REPORT_IMAGES) return "ອັບໂຫຼດຮູບໄດ້ສູງສຸດ 3 ຮູບ";
   return "";
@@ -76,13 +79,32 @@ export function useLostPosts({
   const [lostSaving, setLostSaving] = useState(false);
 
   function updateLost(field, value) {
+    if (field === "noImage") {
+      setLostForm((current) => ({
+        ...current,
+        noImage: Boolean(value),
+        images: value ? [] : current.images,
+      }));
+      return;
+    }
+
+    if (field === "images") {
+      const images = Array.isArray(value) ? value : [];
+      setLostForm((current) => ({
+        ...current,
+        images,
+        noImage: images.length > 0 ? false : current.noImage,
+      }));
+      return;
+    }
+
     const nextValue = field === "time" ? timeInputValue(value) : value;
     setLostForm((current) => ({ ...current, [field]: nextValue }));
   }
 
   async function submitLost(event) {
     event.preventDefault();
-    const imageError = reportImageValidationMessage(lostForm.images);
+    const imageError = reportImageValidationMessage(lostForm.images, lostForm.noImage);
     if (imageError) {
       setToast(imageError);
       return;
@@ -91,7 +113,7 @@ export function useLostPosts({
     setLostSaving(true);
 
     try {
-      const imageUrls = await uploadPostImages(lostForm.images);
+      const imageUrls = lostForm.noImage ? [] : await uploadPostImages(lostForm.images);
       const payload = {
         ownerId: currentUser.id,
         title: lostForm.title || "ຂອງສູນຫາຍໃໝ່",
@@ -106,6 +128,7 @@ export function useLostPosts({
         contactChannel: contactChannelFromUser(currentUser),
         status: "pending_approval",
         imageUrls,
+        noImage: Boolean(lostForm.noImage),
       };
 
       if (editingLostId) {
@@ -161,6 +184,7 @@ export function useLostPosts({
       brand: report.brand,
       uniqueMark: report.uniqueMark,
       images: report.images ?? [],
+      noImage: !(report.images ?? []).length,
     });
     setEditingLostId(id);
     setToast("ກຳລັງແກ້ໄຂຂໍ້ມູນຂອງສູນຫາຍໃນຟອມ");
@@ -215,14 +239,37 @@ export function useLostPosts({
     }
   }
 
-  async function rejectLostItem(id) {
+  async function rejectLostItem(id, reason) {
+    const rejectReason = String(reason ?? "").trim();
+    if (!rejectReason) {
+      setToast("ກະລຸນາລະບຸເຫດຜົນກ່ອນປະຕິເສດປະກາດ");
+      return;
+    }
+
     setLostSaving(true);
     try {
-      await rejectLostPost(id, currentUser.id);
+      await rejectLostPost(id, currentUser.id, rejectReason);
       await loadAppData();
-      setToast("ປະຕິເສດປະກາດຂອງສູນຫາຍແລ້ວ ເກັບໄວ້ກວດສອບຍ້ອນຫຼັງ");
+      setToast("ປະຕິເສດປະກາດຂອງສູນຫາຍພ້ອມເຫດຜົນແລ້ວ");
     } catch (error) {
       setToast(error.message || "ປະຕິເສດປະກາດຂອງສູນຫາຍບໍ່ສຳເລັດ");
+    } finally {
+      setLostSaving(false);
+    }
+  }
+
+  async function markLostItemFound(id) {
+    setLostSaving(true);
+    try {
+      const result = await markLostPostFound(id, currentUser.id);
+      await loadAppData();
+      setToast(
+        result.matchCount
+          ? `ແຈ້ງເຈົ້າຂອງວ່າພົບຂອງແລ້ວ ແລະ ມີລາຍການໃກ້ຄຽງ ${result.matchCount} ລາຍການ`
+          : "ແຈ້ງເຈົ້າຂອງວ່າພົບຂອງແລ້ວ",
+      );
+    } catch (error) {
+      setToast(error.message || "ປ່ຽນສະຖານະຂອງສູນຫາຍບໍ່ສຳເລັດ");
     } finally {
       setLostSaving(false);
     }
@@ -239,5 +286,6 @@ export function useLostPosts({
     deleteLost,
     approveLostItem,
     rejectLostItem,
+    markLostItemFound,
   };
 }

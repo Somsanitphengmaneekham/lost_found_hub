@@ -15,11 +15,19 @@ function revokePreview(image) {
   }
 }
 
-export function ImageUploadField({ images = [], label, onChange }) {
+export function ImageUploadField({
+  helpText,
+  images = [],
+  label,
+  maxImages = MAX_IMAGES,
+  onChange,
+  required = true,
+}) {
   const inputId = useId();
   const safeImages = Array.isArray(images) ? images : [];
   const [uploadError, setUploadError] = useState("");
-  const remainingSlots = Math.max(0, MAX_IMAGES - safeImages.length);
+  const imageLimit = Math.max(1, Number(maxImages) || MAX_IMAGES);
+  const remainingSlots = Math.max(0, imageLimit - safeImages.length);
   const isFull = remainingSlots === 0;
 
   function handleFileChange(event) {
@@ -30,7 +38,7 @@ export function ImageUploadField({ images = [], label, onChange }) {
     if (!selectedFiles.length) return;
 
     if (isFull) {
-      setUploadError(`ອັບໂຫຼດຮູບໄດ້ສູງສຸດ ${MAX_IMAGES} ຮູບ`);
+      setUploadError(`ອັບໂຫຼດຮູບໄດ້ສູງສຸດ ${imageLimit} ຮູບ`);
       return;
     }
 
@@ -81,28 +89,28 @@ export function ImageUploadField({ images = [], label, onChange }) {
   return (
     <div className="lost-upload-group">
       <span>
-        {label} <b>*</b>
+        {label} {required && <b>*</b>}
       </span>
 
       <label className={`lost-upload-box ${isFull ? "is-disabled" : ""}`} htmlFor={inputId}>
         <ImagePlus size={32} />
         <strong>{isFull ? "ອັບໂຫຼດຮູບຄົບແລ້ວ" : "ຄລິກເພື່ອເລືອກຮູບພາບ"}</strong>
         <small>
-          ຕ້ອງມີຢ່າງນ້ອຍ 1 ຮູບ, ສູງສຸດ {MAX_IMAGES} ຮູບ, ຮອງຮັບ JPG, PNG, WEBP
+          {helpText ?? `ຕ້ອງມີຢ່າງນ້ອຍ 1 ຮູບ, ສູງສຸດ ${imageLimit} ຮູບ, ຮອງຮັບ JPG, PNG, WEBP`}
         </small>
         <input
           accept={IMAGE_ACCEPT}
           className="sr-only"
           disabled={isFull}
           id={inputId}
-          multiple
+          multiple={imageLimit > 1}
           onChange={handleFileChange}
           type="file"
         />
       </label>
 
       <small className="image-url-hint">
-        ເລືອກແລ້ວ {safeImages.length}/{MAX_IMAGES} ຮູບ
+        ເລືອກແລ້ວ {safeImages.length}/{imageLimit} ຮູບ
       </small>
       {uploadError && <p className="image-url-error">{uploadError}</p>}
 

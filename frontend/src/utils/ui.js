@@ -67,7 +67,7 @@ export function lostStatusLabel(status) {
     draft: "ຮ່າງ",
     pending_approval: "ລໍຖ້າອາຈານອະນຸມັດ",
     published: "ປະກາດແລ້ວ",
-    matched: "ກຳລັງກວດສອບ match",
+    matched: "ພົບຂອງແລ້ວ",
     rejected: "ປະຕິເສດ",
     resolved: "ໄດ້ຮັບຂອງຄືນແລ້ວ",
     closed: "ໄດ້ຮັບຂອງຄືນແລ້ວ",

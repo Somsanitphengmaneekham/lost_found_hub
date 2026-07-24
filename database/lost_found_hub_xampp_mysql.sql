@@ -343,12 +343,24 @@ ALTER TABLE student_card_uploads
 
 CREATE TABLE return_records (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  claim_request_id INT UNSIGNED NOT NULL,
+  claim_request_id INT UNSIGNED NULL,
   found_post_id INT UNSIGNED NOT NULL,
   returned_by INT UNSIGNED NOT NULL,
-  received_by INT UNSIGNED NOT NULL,
+  received_by INT UNSIGNED NULL,
   return_location_id INT UNSIGNED NULL,
   proof_image_url LONGTEXT NULL,
+  receiver_type ENUM('owner','representative') NOT NULL DEFAULT 'owner',
+  receiver_photo_url LONGTEXT NULL,
+  receiver_name_snapshot VARCHAR(160) NULL,
+  receiver_student_code_snapshot VARCHAR(50) NULL,
+  receiver_department_snapshot VARCHAR(160) NULL,
+  receiver_phone_snapshot VARCHAR(50) NULL,
+  identity_verified TINYINT(1) NOT NULL DEFAULT 0,
+  representative_name VARCHAR(160) NULL,
+  representative_phone VARCHAR(50) NULL,
+  representative_relation VARCHAR(80) NULL,
+  authorization_note TEXT NULL,
+  authorization_image_url LONGTEXT NULL,
   note TEXT NULL,
   returned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -360,7 +372,7 @@ CREATE TABLE return_records (
   KEY idx_return_records_returned_at (returned_at),
   CONSTRAINT fk_return_records_claim_request
     FOREIGN KEY (claim_request_id) REFERENCES claim_requests(id)
-    ON UPDATE CASCADE ON DELETE CASCADE,
+    ON UPDATE CASCADE ON DELETE SET NULL,
   CONSTRAINT fk_return_records_found_post
     FOREIGN KEY (found_post_id) REFERENCES found_posts(id)
     ON UPDATE CASCADE ON DELETE CASCADE,

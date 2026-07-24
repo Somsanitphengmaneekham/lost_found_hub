@@ -1,5 +1,9 @@
 import { resolveLocationId } from "../services/lookups.js";
-import { calculateMatchScore } from "../services/weightedScoreMatching.js";
+import {
+  ensureReturnRecordSecurityColumns,
+  normalizeReturnEvidence,
+} from "../services/return-record-security.js";
+import { calculateMatchScore, rebuildAllMatches } from "../services/weightedScoreMatching.js";
 import { parsePositiveId } from "../utils/shared.js";
 
 function createHttpError(message, statusCode = 400) {
@@ -25,6 +29,8 @@ async function requireTeacher(db, memberId) {
 export function registerMatchesRoutes(app, pool) {
   app.get("/api/matches", async (_req, res, next) => {
     try {
+      await rebuildAllMatches(pool);
+
       const [rows] = await pool.query(`
         SELECT
           m.id,
@@ -69,12 +75,17 @@ export function registerMatchesRoutes(app, pool) {
         INNER JOIN item_categories fc ON fc.id = fp.category_id
         LEFT JOIN locations ll ON ll.id = lp.lost_location_id
         LEFT JOIN locations fl ON fl.id = fp.found_location_id
+        WHERE lp.deleted_at IS NULL
+          AND fp.deleted_at IS NULL
+          AND lp.status IN ('pending_approval', 'published', 'matched')
+          AND fp.status IN ('approved', 'matched')
         ORDER BY m.match_score DESC, m.created_at DESC
       `);
 
       res.json(
         rows.map((row) => {
           const lost = {
+            title: row.lostTitle,
             category_id: row.lostCategoryId,
             lost_location_id: row.lostLocationId,
             lost_at: row.lostAt,
@@ -84,6 +95,7 @@ export function registerMatchesRoutes(app, pool) {
             description: row.lostDescription,
           };
           const found = {
+            title: row.foundTitle,
             category_id: row.foundCategoryId,
             found_location_id: row.foundLocationId,
             found_at: row.foundAt,
@@ -133,6 +145,7 @@ export function registerMatchesRoutes(app, pool) {
       const id = parsePositiveId(req.params.id);
       const returnedBy = await requireTeacher(connection, req.body.returnedByMemberId);
       const receivedBy = parsePositiveId(req.body.receivedByMemberId);
+      let evidence = null;
       const returnLocationId = req.body.returnLocationName
         ? await resolveLocationId(connection, req.body.returnLocationName)
         : null;
@@ -144,10 +157,16 @@ export function registerMatchesRoutes(app, pool) {
             m.found_post_id,
             lp.owner_id AS owner_id,
             lp.status AS lost_status,
-            fp.status AS found_status
+            fp.status AS found_status,
+            owner.student_code AS studentCode,
+            owner.phone,
+            CONCAT(owner.first_name, ' ', owner.last_name) AS receiverName,
+            d.name_th AS departmentName
           FROM matches m
           INNER JOIN lost_posts lp ON lp.id = m.lost_post_id
           INNER JOIN found_posts fp ON fp.id = m.found_post_id
+          INNER JOIN members owner ON owner.id = lp.owner_id
+          LEFT JOIN departments d ON d.id = owner.department_id
           WHERE m.id = ?
           LIMIT 1
         `,
@@ -163,6 +182,15 @@ export function registerMatchesRoutes(app, pool) {
         throw createHttpError("receivedByMemberId must be the lost post owner", 400);
       }
 
+      evidence = normalizeReturnEvidence({
+        receiverDepartment: match.departmentName,
+        receiverName: match.receiverName,
+        receiverPhone: match.phone,
+        receiverStudentCode: match.studentCode,
+        ...req.body,
+      });
+
+      await ensureReturnRecordSecurityColumns(connection);
       await connection.beginTransaction();
 
       const [claimResult] = await connection.execute(
@@ -194,9 +222,22 @@ export function registerMatchesRoutes(app, pool) {
             returned_by,
             received_by,
             return_location_id,
+            proof_image_url,
+            receiver_type,
+            receiver_photo_url,
+            receiver_name_snapshot,
+            receiver_student_code_snapshot,
+            receiver_department_snapshot,
+            receiver_phone_snapshot,
+            identity_verified,
+            representative_name,
+            representative_phone,
+            representative_relation,
+            authorization_note,
+            authorization_image_url,
             note,
             returned_at
-          ) VALUES (?, ?, ?, ?, ?, ?, NOW())
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         `,
         [
           claimResult.insertId,
@@ -204,6 +245,19 @@ export function registerMatchesRoutes(app, pool) {
           returnedBy,
           receivedBy,
           returnLocationId,
+          evidence.proofImageUrl,
+          evidence.receiverType,
+          evidence.receiverPhotoUrl,
+          match.receiverName,
+          match.studentCode,
+          match.departmentName,
+          match.phone,
+          evidence.identityVerified,
+          evidence.representativeName,
+          evidence.representativePhone,
+          evidence.representativeRelation,
+          evidence.authorizationNote,
+          evidence.authorizationImageUrl,
           req.body.note ?? "ຄືນຂອງທີ່ຫ້ອງຄຸ້ມຄອງ",
         ],
       );
@@ -214,6 +268,10 @@ export function registerMatchesRoutes(app, pool) {
       await connection.execute(`UPDATE lost_posts SET status = 'closed' WHERE id = ?`, [
         match.lost_post_id,
       ]);
+      await connection.execute(
+        `DELETE FROM matches WHERE found_post_id = ? OR lost_post_id = ?`,
+        [match.found_post_id, match.lost_post_id],
+      );
 
       await connection.commit();
 
@@ -224,6 +282,18 @@ export function registerMatchesRoutes(app, pool) {
         returnedBy,
         receivedBy,
         returnLocation: req.body.returnLocationName ?? "ຫ້ອງຄຸ້ມຄອງ",
+        receiverType: evidence.receiverType,
+        receiverPhotoUrl: evidence.receiverPhotoUrl,
+        receiverName: match.receiverName,
+        receiverStudentCode: match.studentCode,
+        receiverDepartment: match.departmentName,
+        receiverPhone: match.phone,
+        identityVerified: true,
+        representativeName: evidence.representativeName,
+        representativePhone: evidence.representativePhone,
+        representativeRelation: evidence.representativeRelation,
+        authorizationNote: evidence.authorizationNote,
+        authorizationImageUrl: evidence.authorizationImageUrl,
         returnedAt: new Date().toISOString(),
       });
     } catch (error) {
@@ -241,16 +311,18 @@ export function registerMatchesRoutes(app, pool) {
           rr.id,
           rr.claim_request_id AS claimRequestId,
           rr.found_post_id AS foundPostId,
+          cr.lost_post_id AS lostPostId,
           returned.username AS returnedBy,
-          received.username AS receivedBy,
+          COALESCE(received.username, rr.receiver_name_snapshot) AS receivedBy,
           CONCAT(
             l.name_th,
             IF(l.floor IS NOT NULL AND l.floor <> '', CONCAT(' ຊັ້ນ ', l.floor), '')
           ) AS returnLocation,
           rr.returned_at AS returnedAt
         FROM return_records rr
+        LEFT JOIN claim_requests cr ON cr.id = rr.claim_request_id
         INNER JOIN members returned ON returned.id = rr.returned_by
-        INNER JOIN members received ON received.id = rr.received_by
+        LEFT JOIN members received ON received.id = rr.received_by
         LEFT JOIN locations l ON l.id = rr.return_location_id
         ORDER BY rr.returned_at DESC
       `);

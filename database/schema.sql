@@ -196,12 +196,24 @@ alter table student_card_uploads
 
 create table return_records (
   id uuid primary key default gen_random_uuid(),
-  claim_request_id uuid not null references claim_requests(id) on update cascade on delete cascade,
+  claim_request_id uuid references claim_requests(id) on update cascade on delete set null,
   found_post_id uuid not null references found_posts(id) on update cascade on delete cascade,
   returned_by uuid not null references members(id) on update cascade on delete restrict,
-  received_by uuid not null references members(id) on update cascade on delete restrict,
+  received_by uuid references members(id) on update cascade on delete restrict,
   return_location_id uuid references locations(id) on update cascade on delete set null,
   proof_image_url text,
+  receiver_type text not null default 'owner' check (receiver_type in ('owner', 'representative')),
+  receiver_photo_url text,
+  receiver_name_snapshot varchar(160),
+  receiver_student_code_snapshot varchar(50),
+  receiver_department_snapshot varchar(160),
+  receiver_phone_snapshot varchar(50),
+  identity_verified boolean not null default false,
+  representative_name varchar(160),
+  representative_phone varchar(50),
+  representative_relation varchar(80),
+  authorization_note text,
+  authorization_image_url text,
   note text,
   returned_at timestamptz not null default now()
 );

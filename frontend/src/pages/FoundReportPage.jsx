@@ -26,6 +26,19 @@ export function FoundReportPage({ categoryOptions, foundForm, isEditing, locatio
 
       <div className="lost-report-layout">
         <form className="lost-report-form" onSubmit={onSubmit}>
+          {!isEditing && foundForm.sourceLostTitle && (
+            <div className="found-linked-lost-note">
+              <ClipboardCheck size={20} />
+              <div>
+                <strong>ກຳລັງແຈ້ງພົບຈາກປະກາດສູນຫາຍ</strong>
+                <p>
+                  ລາຍການ: <b>{foundForm.sourceLostTitle}</b>
+                  {foundForm.sourceLostLocation ? ` · ສູນຫາຍທີ່ ${foundForm.sourceLostLocation}` : ""}
+                </p>
+                <span>ລະບົບເຕີມຂໍ້ມູນບາງສ່ວນໃຫ້ແລ້ວ ແຕ່ຕ້ອງລະບຸສະຖານທີ່ພົບ, ເວລາ ແລະ ຮູບພາບຂອງຈິງ.</span>
+              </div>
+            </div>
+          )}
           <div className="lost-form-grid">
             <TextInput
               label="ຊື່ຂອງທີ່ພົບ"

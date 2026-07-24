@@ -1,13 +1,24 @@
 import { resolveCategoryId, resolveLocationId } from "../services/lookups.js";
 import {
+  notifyLostOwnerItemFound,
+  notifyLostOwnersOfFoundMatches,
+  notifyTeachersOfClaimRequest,
   notifyPostAuthorOfDecision,
   notifyTeachersOfPostSubmission,
 } from "../services/post-notification-service.js";
-import { findCandidateMatches } from "../services/weightedScoreMatching.js";
+import {
+  ensureReturnRecordSecurityColumns,
+  normalizeReturnEvidence,
+} from "../services/return-record-security.js";
+import { calculateMatchScore, findCandidateMatches } from "../services/weightedScoreMatching.js";
 import { parsePositiveId, requireFields } from "../utils/shared.js";
 
 const MAX_POST_IMAGES = 3;
+const MATCH_THRESHOLD = 70;
+const MATCH_DATE_WINDOW_DAYS = 7;
 const APPROVAL_RESET_FOUND_STATUSES = new Set(["awaiting_handover", "pending_approval", "rejected"]);
+const ACTIVE_FOUND_MATCH_STATUSES = new Set(["approved", "matched"]);
+const ACTIVE_LOST_MATCH_STATUSES = new Set(["pending_approval", "published", "matched"]);
 const CLOSED_LOST_STATUSES = new Set(["closed", "resolved", "deleted"]);
 const OWNER_EDITABLE_FOUND_STATUSES = new Set(["awaiting_handover", "pending_approval", "rejected"]);
 const OWNER_EDITABLE_LOST_STATUSES = new Set(["pending_approval", "rejected"]);
@@ -73,6 +84,9 @@ const LOST_SELECT = `
     lp.contact_name AS contactName,
     lp.contact_channel AS contactChannel,
     lp.status,
+    lp.reject_reason AS rejectReason,
+    lp.created_at AS createdAt,
+    lp.updated_at AS updatedAt,
     CONCAT(owner.first_name, ' ', owner.last_name) AS ownerName,
     COALESCE(lp.contact_channel, owner.email) AS ownerContact,
     (
@@ -130,6 +144,21 @@ function normalizePostImageUrls(imageUrls, { required = true } = {}) {
   return urls;
 }
 
+function booleanFlag(value) {
+  return value === true || value === 1 || ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
+function requireRejectReason(body) {
+  const reason = String(body.reason ?? "").trim();
+  if (!reason) {
+    throw createHttpError("ກະລຸນາລະບຸເຫດຜົນກ່ອນປະຕິເສດປະກາດ");
+  }
+  if (reason.length > 1000) {
+    throw createHttpError("ເຫດຜົນການປະຕິເສດຍາວເກີນໄປ");
+  }
+  return reason;
+}
+
 async function requireTeacherApprover(db, memberId) {
   const id = parsePositiveId(memberId);
   const [rows] = await db.execute(
@@ -142,6 +171,57 @@ async function requireTeacherApprover(db, memberId) {
   }
 
   return id;
+}
+
+async function requireStudentClaimant(db, memberId) {
+  const id = parsePositiveId(memberId);
+  const [rows] = await db.execute(
+    `
+      SELECT id, username, first_name, last_name, email
+      FROM members
+      WHERE id = ? AND role = 'student' AND is_active = 1
+      LIMIT 1
+    `,
+    [id],
+  );
+
+  if (!rows.length) {
+    throw createHttpError("ຕ້ອງເຂົ້າລະບົບເປັນນັກສຶກສາກ່ອນຂໍຮັບສິ່ງຂອງ", 403);
+  }
+
+  return rows[0];
+}
+
+async function claimRequestDetail(db, claimRequestId) {
+  const [rows] = await db.execute(
+    `
+      SELECT
+        cr.id,
+        cr.found_post_id AS foundPostId,
+        cr.claimant_id AS claimantId,
+        cr.lost_post_id AS lostPostId,
+        cr.claim_message AS claimMessage,
+        cr.status,
+        cr.created_at AS createdAt,
+        fp.title AS foundTitle,
+        CONCAT(
+          l.name_th,
+          IF(l.floor IS NOT NULL AND l.floor <> '', CONCAT(' ຊັ້ນ ', l.floor), '')
+        ) AS locationName,
+        CONCAT(claimant.first_name, ' ', claimant.last_name) AS claimantName,
+        claimant.username AS claimantUsername,
+        claimant.email AS claimantEmail
+      FROM claim_requests cr
+      INNER JOIN found_posts fp ON fp.id = cr.found_post_id
+      LEFT JOIN locations l ON l.id = fp.found_location_id
+      INNER JOIN members claimant ON claimant.id = cr.claimant_id
+      WHERE cr.id = ?
+      LIMIT 1
+    `,
+    [claimRequestId],
+  );
+
+  return rows[0] ?? null;
 }
 
 async function foundAccessRow(db, id) {
@@ -360,7 +440,8 @@ export function registerPostsRoutes(app, pool) {
             brand = COALESCE(?, brand),
             unique_mark = COALESCE(?, unique_mark),
             found_at = COALESCE(?, found_at),
-            status = COALESCE(?, status)
+            status = COALESCE(?, status),
+            reject_reason = CASE WHEN ? = 'pending_approval' THEN NULL ELSE reject_reason END
           WHERE id = ? AND deleted_at IS NULL
         `,
         [
@@ -372,6 +453,7 @@ export function registerPostsRoutes(app, pool) {
           req.body.brand ?? null,
           req.body.uniqueMark ?? null,
           req.body.foundAt ?? null,
+          nextStatus,
           nextStatus,
           id,
         ],
@@ -398,7 +480,7 @@ export function registerPostsRoutes(app, pool) {
       const id = parsePositiveId(req.params.id);
       const currentPost = await foundAccessRow(pool, id);
       await pool.execute(
-        `UPDATE found_posts SET status = 'pending_approval' WHERE id = ? AND deleted_at IS NULL`,
+        `UPDATE found_posts SET status = 'pending_approval', reject_reason = NULL WHERE id = ? AND deleted_at IS NULL`,
         [id],
       );
       const [rows] = await pool.execute(`${FOUND_SELECT} WHERE fp.id = ? LIMIT 1`, [id]);
@@ -410,6 +492,106 @@ export function registerPostsRoutes(app, pool) {
           `found-post-ready-for-approval:${post.id}`,
         );
       }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/found-posts/:id/claim", async (req, res, next) => {
+    try {
+      const id = parsePositiveId(req.params.id);
+      const currentPost = await foundAccessRow(pool, id);
+      const claimant = await requireStudentClaimant(pool, req.body.claimantMemberId ?? req.body.claimantId);
+
+      if (!["approved", "matched"].includes(currentPost.status)) {
+        throw createHttpError("ສາມາດຂໍຮັບໄດ້ສະເພາະລາຍການທີ່ປະກາດແລ້ວ", 409);
+      }
+
+      if (Number(currentPost.finderId) === Number(claimant.id)) {
+        throw createHttpError("ຜູ້ແຈ້ງພົບບໍ່ສາມາດຂໍຮັບລາຍການຂອງຕົນເອງ", 409);
+      }
+
+      const [existingRows] = await pool.execute(
+        `
+          SELECT id
+          FROM claim_requests
+          WHERE found_post_id = ?
+            AND claimant_id = ?
+            AND status IN ('submitted', 'under_review', 'approved')
+          LIMIT 1
+        `,
+        [id, claimant.id],
+      );
+
+      if (existingRows.length) {
+        throw createHttpError("ທ່ານໄດ້ສົ່ງຄຳຂໍຮັບລາຍການນີ້ແລ້ວ", 409);
+      }
+
+      let lostPostId = req.body.lostPostId ? parsePositiveId(req.body.lostPostId) : null;
+
+      if (lostPostId) {
+        const [lostRows] = await pool.execute(
+          `
+            SELECT id
+            FROM lost_posts
+            WHERE id = ?
+              AND owner_id = ?
+              AND deleted_at IS NULL
+              AND status NOT IN ('closed', 'resolved', 'deleted')
+            LIMIT 1
+          `,
+          [lostPostId, claimant.id],
+        );
+
+        if (!lostRows.length) {
+          throw createHttpError("ລາຍການຂອງສູນຫາຍທີ່ເລືອກບໍ່ຖືກຕ້ອງ", 400);
+        }
+      } else {
+        const [matchedLostRows] = await pool.execute(
+          `
+            SELECT lp.id
+            FROM matches m
+            INNER JOIN lost_posts lp ON lp.id = m.lost_post_id
+            WHERE m.found_post_id = ?
+              AND lp.owner_id = ?
+              AND lp.deleted_at IS NULL
+              AND lp.status NOT IN ('closed', 'resolved', 'deleted')
+            ORDER BY m.match_score DESC, m.created_at DESC
+            LIMIT 1
+          `,
+          [id, claimant.id],
+        );
+        lostPostId = matchedLostRows[0]?.id ?? null;
+      }
+
+      const claimMessage =
+        String(req.body.claimMessage ?? "").trim() ||
+        "ນັກສຶກສາກົດຂໍຮັບສິ່ງຂອງ ແລະ ຈະໄປຢືນຢັນຕົວຕົນທີ່ຫ້ອງຄຸ້ມຄອງ";
+
+      if (claimMessage.length > 1000) {
+        throw createHttpError("ຂໍ້ຄວາມຂໍຮັບຍາວເກີນໄປ", 400);
+      }
+
+      const [result] = await pool.execute(
+        `
+          INSERT INTO claim_requests (
+            found_post_id,
+            claimant_id,
+            lost_post_id,
+            claim_message,
+            status
+          ) VALUES (?, ?, ?, ?, 'submitted')
+        `,
+        [id, claimant.id, lostPostId, claimMessage],
+      );
+
+      const claim = await claimRequestDetail(pool, result.insertId);
+      res.status(201).json(claim);
+
+      dispatchEmailNotification(
+        notifyTeachersOfClaimRequest(pool, { claim }),
+        `claim-request-submitted:${claim.id}`,
+      );
     } catch (error) {
       next(error);
     }
@@ -430,7 +612,7 @@ export function registerPostsRoutes(app, pool) {
         [approvedBy, id],
       );
 
-      await rebuildMatchesForFound(pool, id);
+      const matches = await rebuildMatchesForFound(pool, id);
 
       const [rows] = await pool.execute(`${FOUND_SELECT} WHERE fp.id = ? LIMIT 1`, [id]);
       const post = rows[0];
@@ -439,6 +621,10 @@ export function registerPostsRoutes(app, pool) {
         dispatchEmailNotification(
           notifyPostAuthorOfDecision(pool, { postType: "found", postId: id, decision: "approved" }),
           `found-post-approved:${id}`,
+        );
+        dispatchEmailNotification(
+          notifyLostOwnersOfFoundMatches(pool, { matches }),
+          `found-post-matches:${id}`,
         );
       }
     } catch (error) {
@@ -451,7 +637,7 @@ export function registerPostsRoutes(app, pool) {
       const id = parsePositiveId(req.params.id);
       const currentPost = await foundAccessRow(pool, id);
       await requireTeacherApprover(pool, req.body.rejectedByMemberId);
-      const rejectReason = String(req.body.reason || "").trim() || null;
+      const rejectReason = requireRejectReason(req.body);
       await pool.execute(
         `UPDATE found_posts SET status = 'rejected', reject_reason = ? WHERE id = ? AND deleted_at IS NULL`,
         [rejectReason, id],
@@ -481,19 +667,40 @@ export function registerPostsRoutes(app, pool) {
     try {
       const id = parsePositiveId(req.params.id);
       const returnedBy = await requireTeacherApprover(connection, req.body.returnedByMemberId);
-      const receivedBy = parsePositiveId(req.body.receivedByMemberId);
+      const receivedBy = req.body.receivedByMemberId ? parsePositiveId(req.body.receivedByMemberId) : null;
+      const evidence = normalizeReturnEvidence(req.body);
       const currentPost = await foundAccessRow(connection, id);
 
       if (!["approved", "matched"].includes(currentPost.status)) {
         throw createHttpError("ສາມາດບັນທຶກການຄືນໄດ້ສະເພາະລາຍການທີ່ອະນຸມັດແລ້ວ", 409);
       }
 
-      const [receiverRows] = await connection.execute(
-        `SELECT id FROM members WHERE id = ? AND role = 'student' AND is_active = 1 LIMIT 1`,
+      let receiver = null;
+
+      if (receivedBy) {
+        const [receiverRows] = await connection.execute(
+        `
+          SELECT
+            m.id,
+            m.username,
+            m.student_code AS studentCode,
+            m.phone,
+            CONCAT(m.first_name, ' ', m.last_name) AS receiverName,
+            d.name_th AS departmentName
+          FROM members m
+          LEFT JOIN departments d ON d.id = m.department_id
+          WHERE m.id = ?
+            AND m.role = 'student'
+            AND m.is_active = 1
+          LIMIT 1
+        `,
         [receivedBy],
       );
       if (!receiverRows.length) {
         throw createHttpError("ກະລຸນາເລືອກນັກສຶກສາຜູ້ຮັບຄືນທີ່ຍັງເປີດໃຊ້ງານ", 400);
+      }
+
+        receiver = receiverRows[0];
       }
 
       const [lostRows] = await connection.execute(
@@ -511,24 +718,62 @@ export function registerPostsRoutes(app, pool) {
         [id, receivedBy],
       );
       const lostPostId = lostRows[0]?.id ?? null;
+      const receiverSnapshot = {
+        name: evidence.receiverName || receiver?.receiverName || null,
+        studentCode: evidence.receiverStudentCode || receiver?.studentCode || null,
+        department: evidence.receiverDepartment || receiver?.departmentName || null,
+        phone: evidence.receiverPhone || receiver?.phone || null,
+      };
       const note = String(req.body.note || "").trim() || "ຄືນສິ່ງຂອງທີ່ຫ້ອງຄຸ້ມຄອງ";
 
+      await ensureReturnRecordSecurityColumns(connection);
       await connection.beginTransaction();
 
-      const [claimResult] = await connection.execute(
+      const [existingClaimRows] = await connection.execute(
         `
-          INSERT INTO claim_requests (
-            found_post_id,
-            claimant_id,
-            lost_post_id,
-            claim_message,
-            status,
-            verified_by,
-            verified_at
-          ) VALUES (?, ?, ?, ?, 'returned', ?, NOW())
+          SELECT id
+          FROM claim_requests
+          WHERE found_post_id = ?
+            AND claimant_id = ?
+            AND status IN ('submitted', 'under_review', 'approved')
+          ORDER BY created_at DESC
+          LIMIT 1
         `,
-        [id, receivedBy, lostPostId, "ຢືນຢັນຮັບສິ່ງຂອງຄືນທີ່ຫ້ອງຄຸ້ມຄອງ", returnedBy],
+        [id, receivedBy],
       );
+      let claimRequestId = existingClaimRows[0]?.id ?? null;
+
+      if (claimRequestId) {
+        await connection.execute(
+          `
+            UPDATE claim_requests
+            SET
+              lost_post_id = COALESCE(?, lost_post_id),
+              claim_message = ?,
+              status = 'returned',
+              verified_by = ?,
+              verified_at = NOW()
+            WHERE id = ?
+          `,
+          [lostPostId, "ຢືນຢັນຮັບສິ່ງຂອງຄືນທີ່ຫ້ອງຄຸ້ມຄອງ", returnedBy, claimRequestId],
+        );
+      } else if (receivedBy) {
+        const [claimResult] = await connection.execute(
+          `
+            INSERT INTO claim_requests (
+              found_post_id,
+              claimant_id,
+              lost_post_id,
+              claim_message,
+              status,
+              verified_by,
+              verified_at
+            ) VALUES (?, ?, ?, ?, 'returned', ?, NOW())
+          `,
+          [id, receivedBy, lostPostId, "ຢືນຢັນຮັບສິ່ງຂອງຄືນທີ່ຫ້ອງຄຸ້ມຄອງ", returnedBy],
+        );
+        claimRequestId = claimResult.insertId;
+      }
 
       const [returnResult] = await connection.execute(
         `
@@ -538,17 +783,53 @@ export function registerPostsRoutes(app, pool) {
             returned_by,
             received_by,
             return_location_id,
+            proof_image_url,
+            receiver_type,
+            receiver_photo_url,
+            receiver_name_snapshot,
+            receiver_student_code_snapshot,
+            receiver_department_snapshot,
+            receiver_phone_snapshot,
+            identity_verified,
+            representative_name,
+            representative_phone,
+            representative_relation,
+            authorization_note,
+            authorization_image_url,
             note,
             returned_at
-          ) VALUES (?, ?, ?, ?, NULL, ?, NOW())
+          ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         `,
-        [claimResult.insertId, id, returnedBy, receivedBy, note],
+        [
+          claimRequestId,
+          id,
+          returnedBy,
+          receivedBy,
+          evidence.proofImageUrl,
+          evidence.receiverType,
+          evidence.receiverPhotoUrl,
+          receiverSnapshot.name,
+          receiverSnapshot.studentCode,
+          receiverSnapshot.department,
+          receiverSnapshot.phone,
+          evidence.identityVerified,
+          evidence.representativeName,
+          evidence.representativePhone,
+          evidence.representativeRelation,
+          evidence.authorizationNote,
+          evidence.authorizationImageUrl,
+          note,
+        ],
       );
 
       await connection.execute(`UPDATE found_posts SET status = 'returned' WHERE id = ?`, [id]);
       if (lostPostId) {
         await connection.execute(`UPDATE lost_posts SET status = 'closed' WHERE id = ?`, [lostPostId]);
       }
+      await connection.execute(
+        `DELETE FROM matches WHERE found_post_id = ? OR lost_post_id = ?`,
+        [id, lostPostId],
+      );
 
       await connection.commit();
 
@@ -557,12 +838,24 @@ export function registerPostsRoutes(app, pool) {
         post: postRows[0],
         returnRecord: {
           id: returnResult.insertId,
-          claimRequestId: claimResult.insertId,
+          claimRequestId,
           foundPostId: id,
           returnedBy,
           receivedBy,
           lostPostId,
           returnLocation: "ຫ້ອງຄຸ້ມຄອງ",
+          receiverType: evidence.receiverType,
+          receiverPhotoUrl: evidence.receiverPhotoUrl,
+          receiverName: receiverSnapshot.name,
+          receiverStudentCode: receiverSnapshot.studentCode,
+          receiverDepartment: receiverSnapshot.department,
+          receiverPhone: receiverSnapshot.phone,
+          identityVerified: true,
+          representativeName: evidence.representativeName,
+          representativePhone: evidence.representativePhone,
+          representativeRelation: evidence.representativeRelation,
+          authorizationNote: evidence.authorizationNote,
+          authorizationImageUrl: evidence.authorizationImageUrl,
           returnedAt: new Date().toISOString(),
         },
       });
@@ -615,7 +908,7 @@ export function registerPostsRoutes(app, pool) {
   app.post("/api/lost-posts", async (req, res, next) => {
     try {
       requireFields(req.body, ["ownerId", "title", "description", "categoryName"]);
-      const imageUrls = normalizePostImageUrls(req.body.imageUrls);
+      const imageUrls = normalizePostImageUrls(req.body.imageUrls, { required: !booleanFlag(req.body.noImage) });
 
       const categoryId = await resolveCategoryId(pool, req.body.categoryName);
       const lostLocationId = await resolveLocationId(pool, req.body.locationName);
@@ -689,7 +982,7 @@ export function registerPostsRoutes(app, pool) {
           : undefined;
       const imageUrls =
         req.body.imageUrls !== undefined
-          ? normalizePostImageUrls(req.body.imageUrls)
+          ? normalizePostImageUrls(req.body.imageUrls, { required: !booleanFlag(req.body.noImage) })
           : undefined;
       const nextStatus = lostStatusAfterServerEdit(currentPost.status);
 
@@ -707,7 +1000,8 @@ export function registerPostsRoutes(app, pool) {
             lost_at = COALESCE(?, lost_at),
             contact_name = COALESCE(?, contact_name),
             contact_channel = COALESCE(?, contact_channel),
-            status = COALESCE(?, status)
+            status = COALESCE(?, status),
+            reject_reason = CASE WHEN ? = 'pending_approval' THEN NULL ELSE reject_reason END
           WHERE id = ? AND deleted_at IS NULL
         `,
         [
@@ -721,6 +1015,7 @@ export function registerPostsRoutes(app, pool) {
           req.body.lostAt ?? null,
           req.body.contactName ?? null,
           req.body.contactChannel ?? null,
+          nextStatus,
           nextStatus,
           id,
         ],
@@ -768,6 +1063,44 @@ export function registerPostsRoutes(app, pool) {
           notifyPostAuthorOfDecision(pool, { postType: "lost", postId: id, decision: "approved" }),
           `lost-post-approved:${id}`,
         );
+        dispatchEmailNotification(
+          notifyLostOwnersOfFoundMatches(pool, { matches }),
+          `lost-post-matches:${id}`,
+        );
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/lost-posts/:id/mark-found", async (req, res, next) => {
+    try {
+      const id = parsePositiveId(req.params.id);
+      const currentPost = await lostAccessRow(pool, id);
+      await requireTeacherApprover(pool, req.body.markedByMemberId);
+
+      if (!["published", "matched"].includes(currentPost.status)) {
+        throw createHttpError("lost post must be published before it can be marked as found", 409);
+      }
+
+      await pool.execute(
+        `
+          UPDATE lost_posts
+          SET status = 'matched', updated_at = NOW()
+          WHERE id = ? AND deleted_at IS NULL
+        `,
+        [id],
+      );
+
+      const matches = await findCandidateMatches(pool, id);
+      const [rows] = await pool.execute(`${LOST_SELECT} WHERE lp.id = ? LIMIT 1`, [id]);
+      const post = rows[0];
+      res.json({ post, matchCount: matches.length });
+      if (currentPost.status !== "matched") {
+        dispatchEmailNotification(
+          notifyLostOwnerItemFound(pool, { lostPostId: id, matchCount: matches.length }),
+          `lost-post-marked-found:${id}`,
+        );
       }
     } catch (error) {
       next(error);
@@ -779,10 +1112,10 @@ export function registerPostsRoutes(app, pool) {
       const id = parsePositiveId(req.params.id);
       const currentPost = await lostAccessRow(pool, id);
       await requireTeacherApprover(pool, req.body.rejectedByMemberId);
-      const rejectReason = String(req.body.reason || "").trim() || null;
+      const rejectReason = requireRejectReason(req.body);
       await pool.execute(
-        `UPDATE lost_posts SET status = 'rejected' WHERE id = ? AND deleted_at IS NULL`,
-        [id],
+        `UPDATE lost_posts SET status = 'rejected', reject_reason = ? WHERE id = ? AND deleted_at IS NULL`,
+        [rejectReason, id],
       );
       await pool.execute(`DELETE FROM matches WHERE lost_post_id = ?`, [id]);
       const [rows] = await pool.execute(`${LOST_SELECT} WHERE lp.id = ? LIMIT 1`, [id]);
@@ -836,68 +1169,60 @@ async function rebuildMatchesForFound(pool, foundPostId) {
     [foundPostId],
   );
   const found = foundRows[0];
-  if (!found || found.status !== "approved") return [];
+
+  await pool.execute(`DELETE FROM matches WHERE found_post_id = ?`, [foundPostId]);
+
+  if (!found || !ACTIVE_FOUND_MATCH_STATUSES.has(found.status)) return [];
 
   const [lostRows] = await pool.execute(
-    `SELECT * FROM lost_posts WHERE status IN ('pending_approval', 'published') AND deleted_at IS NULL`,
+    `
+      SELECT *
+      FROM lost_posts
+      WHERE status IN ('pending_approval', 'published', 'matched')
+        AND deleted_at IS NULL
+        AND category_id = ?
+        AND (
+          ? IS NULL
+          OR lost_at IS NULL
+          OR lost_at BETWEEN DATE_SUB(?, INTERVAL ? DAY)
+                         AND DATE_ADD(?, INTERVAL ? DAY)
+        )
+      ORDER BY
+        (lost_location_id = ?) DESC,
+        (LOWER(TRIM(COALESCE(color, ''))) = LOWER(TRIM(COALESCE(?, '')))) DESC,
+        lost_at DESC
+    `,
+    [
+      found.category_id,
+      found.found_at,
+      found.found_at,
+      MATCH_DATE_WINDOW_DAYS,
+      found.found_at,
+      MATCH_DATE_WINDOW_DAYS,
+      found.found_location_id,
+      found.color,
+    ],
   );
 
   const saved = [];
 
   for (const lost of lostRows) {
-    const result = calculateMatchFromRows(lost, found);
-    if (result.score < 70) continue;
+    if (!ACTIVE_LOST_MATCH_STATUSES.has(lost.status)) continue;
 
-    const [existingRows] = await pool.execute(
-      `SELECT id FROM matches WHERE lost_post_id = ? AND found_post_id = ? LIMIT 1`,
-      [lost.id, found.id],
-    );
-
-    if (existingRows[0]) {
-      await pool.execute(`UPDATE matches SET match_score = ? WHERE id = ?`, [
-        result.score,
-        existingRows[0].id,
-      ]);
-      saved.push(existingRows[0].id);
-      continue;
-    }
+    const result = calculateMatchScore(lost, found);
+    if (result.score < MATCH_THRESHOLD) continue;
 
     const [insertResult] = await pool.execute(
       `INSERT INTO matches (lost_post_id, found_post_id, match_score) VALUES (?, ?, ?)`,
       [lost.id, found.id, result.score],
     );
-    saved.push(insertResult.insertId);
+    saved.push({
+      matchId: insertResult.insertId,
+      lostPostId: lost.id,
+      foundPostId: found.id,
+      score: result.score,
+    });
   }
 
   return saved;
-}
-
-function calculateMatchFromRows(lost, found) {
-  let score = 0;
-
-  if (Number(lost.category_id) === Number(found.category_id)) score += 40;
-
-  if (
-    lost.lost_location_id &&
-    found.found_location_id &&
-    Number(lost.lost_location_id) === Number(found.found_location_id)
-  ) {
-    score += 25;
-  }
-
-  const diff =
-    lost.lost_at && found.found_at
-      ? Math.abs(
-          Math.round(
-            (new Date(lost.lost_at).getTime() - new Date(found.found_at).getTime()) / 86_400_000,
-          ),
-        )
-      : null;
-  if (diff !== null && diff <= 3) score += 20;
-
-  const lostColor = String(lost.color ?? "").trim().toLowerCase();
-  const foundColor = String(found.color ?? "").trim().toLowerCase();
-  if (lostColor && lostColor === foundColor) score += 15;
-
-  return { score };
 }

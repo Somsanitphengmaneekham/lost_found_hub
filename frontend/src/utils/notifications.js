@@ -27,7 +27,7 @@ function userOwnsMatch(match, currentUser) {
   return Number(lostOwnerId) === Number(currentUser.id);
 }
 
-function buildTeacherNotifications({ foundItems, lostReports }) {
+function buildTeacherNotifications({ foundItems, lostReports, claimRequests = [] }) {
   const approvalNotifications = foundItems
     .filter((item) => TEACHER_APPROVAL_STATUSES.has(item.status))
     .map((item) => {
@@ -62,10 +62,25 @@ function buildTeacherNotifications({ foundItems, lostReports }) {
       priority: 1,
     }));
 
-  return [...approvalNotifications, ...lostApprovalNotifications].sort(sortNotifications);
+  const claimNotifications = claimRequests
+    .filter((claim) => ["submitted", "under_review"].includes(claim.status))
+    .map((claim) => ({
+      id: `teacher-claim-${claim.id}-${claim.status}`,
+      audience: "teacher",
+      tone: "amber",
+      title: "ມີນັກສຶກສາຂໍຮັບສິ່ງຂອງ",
+      description: `${claim.foundTitle || "ສິ່ງຂອງທີ່ພົບ"} · ${claim.claimantName || "ນັກສຶກສາ"}`,
+      meta: "ສະເພາະອາຈານ · ກວດຕົວຕົນທີ່ຫ້ອງຄຸ້ມຄອງກ່ອນສົ່ງຄືນ",
+      actionLabel: "ໄປກວດສອບ",
+      href: "#approval",
+      createdAt: notificationDate(claim.createdAt),
+      priority: 1,
+    }));
+
+  return [...claimNotifications, ...approvalNotifications, ...lostApprovalNotifications].sort(sortNotifications);
 }
 
-function buildStudentNotifications({ currentUser, foundItems, lostReports, matches, returnRecords }) {
+function buildStudentNotifications({ currentUser, foundItems, lostReports, matches, returnRecords, claimRequests = [] }) {
   const foundNotifications = foundItems
     .filter((item) => userOwnsFound(item, currentUser))
     .flatMap((item) => {
@@ -153,7 +168,7 @@ function buildStudentNotifications({ currentUser, foundItems, lostReports, match
         audience: "student",
         tone: isMatched || isPublished ? "green" : isRejected ? "red" : isPending ? "blue" : "slate",
         title: isMatched
-          ? "ຂອງສູນຫາຍຂອງທ່ານຖືກຈັບຄູ່ແລ້ວ"
+          ? "ອາຈານແຈ້ງວ່າພົບຂອງຂອງທ່ານແລ້ວ"
           : isPending
             ? "ປະກາດຂອງສູນຫາຍລໍຖ້າອາຈານອະນຸມັດ"
             : isRejected
@@ -162,10 +177,12 @@ function buildStudentNotifications({ currentUser, foundItems, lostReports, match
                 ? "ປະກາດຂອງສູນຫາຍຂອງທ່ານຖືກອະນຸມັດແລ້ວ"
                 : "ປະກາດຂອງສູນຫາຍຂອງທ່ານຖືກບັນທຶກແລ້ວ",
         description: `${item.title} · ${item.location}`,
-        meta: "ສະເພາະນັກສຶກສາ · ຕິດຕາມສະຖານະຂອງຕົນເອງ",
-        actionLabel: "ເບິ່ງລາຍງານ",
+        meta: isMatched
+          ? "ສະເພາະນັກສຶກສາ · ນຳບັດນັກສຶກສາໄປຢືນຢັນທີ່ຫ້ອງຄຸ້ມຄອງ"
+          : "ສະເພາະນັກສຶກສາ · ຕິດຕາມສະຖານະຂອງຕົນເອງ",
+        actionLabel: isMatched ? "ເບິ່ງສະຖານະ" : "ເບິ່ງລາຍງານ",
         href: "#reports",
-        createdAt: notificationDate(item.lostAt),
+        createdAt: notificationDate(isMatched ? item.updatedAt || item.createdAt || item.lostAt : item.lostAt),
         priority: isMatched || isPending || isRejected ? 1 : 5,
       };
     });
@@ -187,11 +204,11 @@ function buildStudentNotifications({ currentUser, foundItems, lostReports, match
       return {
         id: `student-match-${match.id}`,
         audience: "student",
-        tone: "blue",
-        title: "ພົບລາຍການທີ່ອາດກົງກັນ",
-        description: `${lostTitle} ອາດກົງກັບ ${foundTitle}`,
-        meta: `ສະເພາະນັກສຶກສາ · ຄະແນນ Match ${Math.round(Number(match.matchScore) || 0)}%`,
-        actionLabel: "ເບິ່ງລາຍການແນະນຳ",
+        tone: "green",
+        title: "ມີຄົນພົບຂອງທີ່ອາດເປັນຂອງທ່ານ",
+        description: `${foundTitle} ອາດກົງກັບ ${lostTitle}`,
+        meta: `ກະລຸນາກວດລາຍລະອຽດ ແລະ ໄປຢືນຢັນທີ່ຫ້ອງຄຸ້ມຄອງ · ${Math.round(Number(match.matchScore) || 0)}%`,
+        actionLabel: "ເບິ່ງລາຍການໃກ້ຄຽງ",
         href: "#matching",
         createdAt: notificationDate(match.createdAt),
         priority: 2,
@@ -226,20 +243,37 @@ function buildStudentNotifications({ currentUser, foundItems, lostReports, match
       };
     });
 
+  const claimNotifications = claimRequests
+    .filter((claim) => Number(claim.claimantId) === Number(currentUser.id))
+    .filter((claim) => ["submitted", "under_review", "approved"].includes(claim.status))
+    .map((claim) => ({
+      id: `student-claim-${claim.id}-${claim.status}`,
+      audience: "student",
+      tone: "blue",
+      title: "ສົ່ງຄຳຂໍຮັບສິ່ງຂອງແລ້ວ",
+      description: `${claim.foundTitle || "ສິ່ງຂອງທີ່ພົບ"} · ກະລຸນາໄປຢືນຢັນທີ່ຫ້ອງຄຸ້ມຄອງ`,
+      meta: "ສະເພາະນັກສຶກສາ · ລໍຖ້າກວດສອບຕົວຕົນ",
+      actionLabel: "ເບິ່ງແຈ້ງເຕືອນ",
+      href: "#notifications",
+      createdAt: notificationDate(claim.createdAt),
+      priority: 2,
+    }));
+
   return [
     ...foundNotifications,
     ...lostNotifications,
     ...matchNotifications,
     ...returnNotifications,
+    ...claimNotifications,
   ].sort(sortNotifications);
 }
 
-export function buildNotifications({ currentUser, foundItems, lostReports, matches, returnRecords }) {
+export function buildNotifications({ currentUser, foundItems, lostReports, matches, returnRecords, claimRequests }) {
   if (!currentUser) return [];
 
   if (currentUser.role === "teacher") {
-    return buildTeacherNotifications({ foundItems, lostReports });
+    return buildTeacherNotifications({ foundItems, lostReports, claimRequests });
   }
 
-  return buildStudentNotifications({ currentUser, foundItems, lostReports, matches, returnRecords });
+  return buildStudentNotifications({ currentUser, foundItems, lostReports, matches, returnRecords, claimRequests });
 }

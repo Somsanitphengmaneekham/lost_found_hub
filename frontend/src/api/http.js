@@ -31,5 +31,5 @@ export async function request(path, options = {}) {
 
 export function shouldUseLocalFallback(error) {
   if (REQUIRE_API) return false;
-  return !error?.status || error.status >= 500;
+  return !error?.status;
 }

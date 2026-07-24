@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Search, X } from "lucide-react";
 import { normalizeText } from "../../utils/ui.js";
 
@@ -18,6 +18,10 @@ export function StudentSearchCombobox({ itemTitle, onChange, students, value }) 
   const [query, setQuery] = useState(() => (selectedStudent ? studentLabel(selectedStudent) : ""));
   const [open, setOpen] = useState(false);
   const normalizedQuery = normalizeText(query);
+
+  useEffect(() => {
+    setQuery(selectedStudent ? studentLabel(selectedStudent) : "");
+  }, [selectedStudent]);
 
   const visibleStudents = useMemo(() => {
     const matches = normalizedQuery

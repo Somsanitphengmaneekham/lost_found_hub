@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   CalendarClock,
@@ -42,12 +42,30 @@ function itemDateTime(item, isLost) {
   return detailValue(item.date, item.time);
 }
 
-export function AnnouncementDetailPage({ canReview, item }) {
+export function AnnouncementDetailPage({
+  canViewMatches,
+  claimRequests = [],
+  currentUser,
+  item,
+  onClaimFound,
+  onReportFound,
+  onViewMatches,
+}) {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [claimPanelOpen, setClaimPanelOpen] = useState(false);
+  const [claimMessage, setClaimMessage] = useState("");
+  const [claimError, setClaimError] = useState("");
+  const [claimSaving, setClaimSaving] = useState(false);
+  const [claimSubmitted, setClaimSubmitted] = useState(false);
+  const claimPanelRef = useRef(null);
   const isLost = item?.homeType === "lost";
 
   useEffect(() => {
     setActiveImageIndex(0);
+    setClaimPanelOpen(false);
+    setClaimMessage("");
+    setClaimError("");
+    setClaimSubmitted(false);
   }, [item?.homeKey]);
 
   const images = useMemo(() => itemImages(item), [item]);
@@ -59,12 +77,67 @@ export function AnnouncementDetailPage({ canReview, item }) {
   const reporterLabel = isLost ? "ຜູ້ແຈ້ງສູນຫາຍ" : "ຜູ້ແຈ້ງພົບ";
   const reporterName = isLost ? item.owner : item.finder;
   const contactText = isLost ? item.contact : "ຕິດຕໍ່ຜ່ານຫ້ອງຄຸ້ມຄອງ";
+  const isClaimableFound = !isLost && ["approved", "matched"].includes(item.status);
+  const isOwnFoundPost = Number(item.finderId) === Number(currentUser?.id);
+  const existingClaim = !isLost && currentUser
+    ? claimRequests.find(
+        (claim) =>
+          Number(claim.foundPostId) === Number(item.id) &&
+          Number(claim.claimantId) === Number(currentUser.id) &&
+          ["submitted", "under_review", "approved", "returned"].includes(claim.status),
+      )
+    : null;
+  const hasActiveClaim = ["submitted", "under_review", "approved"].includes(existingClaim?.status);
+  const canClaimFound =
+    isClaimableFound &&
+    currentUser?.role === "student" &&
+    !isOwnFoundPost &&
+    !hasActiveClaim &&
+    existingClaim?.status !== "returned" &&
+    !claimSubmitted;
   const detailFacts = [
     { icon: Tag, label: "ໝວດໝູ່", value: valueOrDash(item.category) },
     { icon: MapPin, label: isLost ? "ສະຖານທີ່ສູນຫາຍ" : "ສະຖານທີ່ພົບ", value: valueOrDash(item.location) },
     { icon: CalendarClock, label: isLost ? "ວັນເວລາທີ່ສູນຫາຍ" : "ວັນເວລາທີ່ພົບ", value: itemDateTime(item, isLost) },
     { icon: Palette, label: "ສີ / ຍີ່ຫໍ້", value: detailValue(item.color, item.brand) },
   ];
+
+  async function handleClaimSubmit(event) {
+    event.preventDefault();
+    if (!canClaimFound) return;
+    setClaimError("");
+    setClaimSaving(true);
+
+    try {
+      const result = await onClaimFound?.(item, claimMessage.trim());
+      if (result) {
+        setClaimPanelOpen(false);
+        setClaimSubmitted(true);
+        setClaimMessage("");
+      }
+    } catch (error) {
+      setClaimError(error.message || "ບໍ່ສາມາດສົ່ງຄຳຂໍຮັບໄດ້");
+    } finally {
+      setClaimSaving(false);
+    }
+  }
+
+  function openClaimPanel() {
+    setClaimPanelOpen(true);
+    setClaimError("");
+    window.setTimeout(() => {
+      claimPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 50);
+  }
+
+  function claimUnavailableText() {
+    if (!currentUser) return "";
+    if (currentUser.role !== "student") return "ຄຳຂໍຮັບເປີດໃຫ້ນັກສຶກສາເທົ່ານັ້ນ";
+    if (isOwnFoundPost) return "ທ່ານເປັນຜູ້ແຈ້ງພົບລາຍການນີ້";
+    if (existingClaim?.status === "returned") return "ລາຍການນີ້ບັນທຶກວ່າຮັບຄືນແລ້ວ";
+    if (!isClaimableFound) return "ລາຍການນີ້ຍັງບໍ່ພ້ອມໃຫ້ຂໍຮັບ";
+    return "";
+  }
 
   return (
     <section className="announcement-detail-page" id="announcement-detail" aria-labelledby="announcement-detail-title">
@@ -158,17 +231,76 @@ export function AnnouncementDetailPage({ canReview, item }) {
           </div>
 
           <div className="detail-action-buttons">
-            <a className="button button-primary" href={isLost ? "#found-form" : "#lost-form"}>
-              {isLost ? <ClipboardCheck size={18} /> : <CircleHelp size={18} />}
-              {isLost ? "ແຈ້ງວ່າພົບຂອງນີ້" : "ແຈ້ງຂອງສູນຫາຍຂອງຂ້ອຍ"}
-            </a>
-            {canReview && (
-              <a className="outline-button" href="#matching">
+            {isLost && (
+              <button className="button button-primary" onClick={() => onReportFound?.(item)} type="button">
+                <ClipboardCheck size={18} />
+                ແຈ້ງວ່າພົບຂອງນີ້
+              </button>
+            )}
+            {!isLost && !currentUser && (
+              <a className="button button-primary" href="#login">
                 <UserRound size={18} />
-                ໄປກວດສອບ Match
+                ເຂົ້າລະບົບເພື່ອຂໍຮັບຂອງ
               </a>
             )}
+            {canClaimFound && (
+              <button
+                className="button button-primary"
+                onClick={openClaimPanel}
+                type="button"
+              >
+                <UserRound size={18} />
+                ຂໍຮັບສິ່ງຂອງນີ້
+              </button>
+            )}
+            {!isLost && currentUser && !canClaimFound && !hasActiveClaim && !claimSubmitted && (
+              <span className="detail-muted-action">{claimUnavailableText()}</span>
+            )}
+            {canViewMatches && (
+              <button className="outline-button" onClick={() => onViewMatches?.(item)} type="button">
+                <UserRound size={18} />
+                ເບິ່ງລາຍການໃກ້ຄຽງ
+              </button>
+            )}
           </div>
+
+          {!isLost && (claimSubmitted || hasActiveClaim) && (
+            <div className="claim-request-success" role="status">
+              <CheckCircle2 size={18} />
+              <div>
+                <strong>ສົ່ງຄຳຂໍຮັບແລ້ວ</strong>
+                <span>ອາຈານຈະໄດ້ຮັບແຈ້ງເຕືອນ. ກະລຸນາໄປຫ້ອງຄຸ້ມຄອງພ້ອມບັດນັກສຶກສາເພື່ອຢືນຢັນກ່ອນຮັບຂອງ.</span>
+              </div>
+            </div>
+          )}
+
+          {!isLost && claimPanelOpen && canClaimFound && (
+            <form className="claim-request-panel" onSubmit={handleClaimSubmit} ref={claimPanelRef}>
+              <div>
+                <strong>ຢືນຢັນການຂໍຮັບສິ່ງຂອງ</strong>
+                <p>ລະບົບຈະແຈ້ງອາຈານວ່າທ່ານຄິດວ່າລາຍການນີ້ເປັນຂອງທ່ານ. ການຮັບຂອງຈິງຕ້ອງຢືນຢັນທີ່ຫ້ອງຄຸ້ມຄອງ.</p>
+              </div>
+              <label>
+                <span>ຂໍ້ຄວາມເພີ່ມເຕີມ</span>
+                <textarea
+                  maxLength={1000}
+                  onChange={(event) => setClaimMessage(event.target.value)}
+                  placeholder="ເຊັ່ນ ຂອງນີ້ມີຈຸດສັງເກດຫຍັງ ຫຼື ຈະໄປຫ້ອງຄຸ້ມຄອງເວລາໃດ..."
+                  value={claimMessage}
+                />
+              </label>
+              {claimError && <p className="claim-request-error">{claimError}</p>}
+              <div className="claim-request-actions">
+                <button className="outline-button" onClick={() => setClaimPanelOpen(false)} type="button">
+                  ຍົກເລີກ
+                </button>
+                <button className="button button-primary" disabled={claimSaving} type="submit">
+                  <UserRound size={18} />
+                  {claimSaving ? "ກຳລັງສົ່ງ..." : "ສົ່ງຄຳຂໍຮັບ"}
+                </button>
+              </div>
+            </form>
+          )}
         </article>
       </div>
     </section>

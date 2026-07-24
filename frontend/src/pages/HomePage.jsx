@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
   CircleHelp,
   ClipboardCheck,
   FileQuestion,
@@ -17,12 +19,13 @@ import { statusMeta } from "../data.js";
 import { EmptyState } from "../components/common/FormControls.jsx";
 import { lostStatusLabel } from "../utils/ui.js";
 
+const ANNOUNCEMENTS_PER_PAGE = 8;
+
 export function HomePage({
   activeCategory,
   activeStatus,
   appError,
   appLoading,
-  canReview,
   categoryFilterOptions,
   foundCount,
   homeItems,
@@ -101,8 +104,6 @@ export function HomePage({
 
       <Announcements
         announcementItems={homeItems}
-        canReview={canReview}
-        isAuthenticated={isAuthenticated}
         onSelect={onSelectItem}
         selectedItemId={selectedItemId}
       />
@@ -254,7 +255,25 @@ function HomeSearchBar({
   );
 }
 
-function Announcements({ announcementItems, canReview, isAuthenticated, onSelect, selectedItemId }) {
+function Announcements({ announcementItems, onSelect, selectedItemId }) {
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(announcementItems.length / ANNOUNCEMENTS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * ANNOUNCEMENTS_PER_PAGE;
+  const visibleItems = announcementItems.slice(pageStart, pageStart + ANNOUNCEMENTS_PER_PAGE);
+  const showPagination = totalPages > 1;
+
+  useEffect(() => {
+    setPage(1);
+  }, [announcementItems]);
+
+  function goToPage(nextPage) {
+    setPage(Math.min(totalPages, Math.max(1, nextPage)));
+    window.setTimeout(() => {
+      document.getElementById("announcements")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }
+
   return (
     <section className="recent-section" id="announcements" aria-labelledby="announcement-title">
       <div className="recent-heading">
@@ -262,11 +281,10 @@ function Announcements({ announcementItems, canReview, isAuthenticated, onSelect
           <h2 id="announcement-title">ລາຍການປະກາດຫຼ້າສຸດ</h2>
           <p>ອັບເດດແບບຣຽວໄທມ໌ຈາກພາຍໃນຄະນະ</p>
         </div>
-        <a href={canReview ? "#approval" : "#dashboard"}>ເບິ່ງທັງໝົດ</a>
       </div>
       <div className="recent-grid">
-        {announcementItems.length ? (
-          announcementItems.slice(0, 4).map((item, index) => {
+        {visibleItems.length ? (
+          visibleItems.map((item, index) => {
             const isLost = item.homeType === "lost";
             const badgeLabel = isLost
               ? lostStatusLabel(item.status)
@@ -298,6 +316,33 @@ function Announcements({ announcementItems, canReview, isAuthenticated, onSelect
           <EmptyState title="ບໍ່ພົບປະກາດ" description="ລອງປ່ຽນຄຳຄົ້ນຫາ ຫຼື ເລືອກໝວດໝູ່ອື່ນ" />
         )}
       </div>
+      {showPagination && (
+        <div className="pagination-controls" aria-label="Announcement pagination">
+          <button
+            aria-label="Previous page"
+            className="pagination-button"
+            disabled={currentPage === 1}
+            onClick={() => goToPage(currentPage - 1)}
+            type="button"
+          >
+            <ChevronLeft size={18} />
+            ກ່ອນໜ້າ
+          </button>
+          <span className="pagination-status">
+            ໜ້າ {currentPage.toLocaleString("lo-LA")} / {totalPages.toLocaleString("lo-LA")}
+          </span>
+          <button
+            aria-label="Next page"
+            className="pagination-button primary"
+            disabled={currentPage === totalPages}
+            onClick={() => goToPage(currentPage + 1)}
+            type="button"
+          >
+            ຖັດໄປ
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      )}
     </section>
   );
 }

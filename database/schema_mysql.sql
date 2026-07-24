@@ -380,23 +380,35 @@ ALTER TABLE student_card_uploads
 -- ── return_records ────────────────────────────────────────────
 CREATE TABLE return_records (
   id                INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  match_id          INT UNSIGNED     NULL COMMENT 'ເຊື່ອມໂຍງກັບ matches.id (nullable ສຳລັບກໍລະນີສ້າງໂດຍກົງ)',
+  claim_request_id  INT UNSIGNED     NULL COMMENT 'ເຊື່ອມໂຍງກັບ claim_requests.id (nullable ຖ້າບັນທຶກການຄືນໂດຍກົງ)',
   found_post_id     INT UNSIGNED NOT NULL,
   returned_by       INT UNSIGNED NOT NULL COMMENT 'ສະມາຊິກທີ່ສ້າງ record (ອາຈານ/ຄຸ້ມຄອງ)',
-  received_by       INT UNSIGNED NOT NULL COMMENT 'ເຈົ້າຂອງທີ່ຮັບຂອງຄືນ',
+  received_by       INT UNSIGNED     NULL COMMENT 'ເຈົ້າຂອງທີ່ຮັບຂອງຄືນ (nullable ຖ້າກອກຂໍ້ມູນຜູ້ຮັບເອງ)',
   return_location_id INT UNSIGNED    NULL,
   proof_image_url   VARCHAR(2048)    NULL,
+  receiver_type     ENUM('owner','representative') NOT NULL DEFAULT 'owner',
+  receiver_photo_url VARCHAR(2048)   NULL,
+  receiver_name_snapshot VARCHAR(160) NULL,
+  receiver_student_code_snapshot VARCHAR(50) NULL,
+  receiver_department_snapshot VARCHAR(160) NULL,
+  receiver_phone_snapshot VARCHAR(50) NULL,
+  identity_verified TINYINT(1) NOT NULL DEFAULT 0,
+  representative_name VARCHAR(160) NULL,
+  representative_phone VARCHAR(50) NULL,
+  representative_relation VARCHAR(80) NULL,
+  authorization_note TEXT NULL,
+  authorization_image_url VARCHAR(2048) NULL,
   note              TEXT             NULL,
   returned_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  KEY idx_return_records_match_id (match_id),
+  KEY idx_return_records_claim_request_id (claim_request_id),
   KEY idx_return_records_found_post_id (found_post_id),
   KEY idx_return_records_returned_by (returned_by),
   KEY idx_return_records_received_by (received_by),
   KEY idx_return_records_return_location_id (return_location_id),
   KEY idx_return_records_returned_at (returned_at),
-  CONSTRAINT fk_return_records_match
-    FOREIGN KEY (match_id) REFERENCES matches(id)
+  CONSTRAINT fk_return_records_claim_request
+    FOREIGN KEY (claim_request_id) REFERENCES claim_requests(id)
     ON UPDATE CASCADE ON DELETE SET NULL,
   CONSTRAINT fk_return_records_found_post
     FOREIGN KEY (found_post_id) REFERENCES found_posts(id)

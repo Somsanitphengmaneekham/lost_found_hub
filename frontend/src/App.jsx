@@ -9,6 +9,7 @@ import { LoginPage } from "./pages/LoginPage.jsx";
 import { HomePage } from "./pages/HomePage.jsx";
 import { AnnouncementDetailPage } from "./pages/AnnouncementDetailPage.jsx";
 import { DashboardPage } from "./pages/DashboardPage.jsx";
+import { MyItemsPage } from "./pages/MyItemsPage.jsx";
 import { FoundReportPage } from "./pages/FoundReportPage.jsx";
 import { LostReportPage } from "./pages/LostReportPage.jsx";
 import { ProfilePage } from "./pages/ProfilePage.jsx";
@@ -25,9 +26,11 @@ import { useFoundPosts } from "./hooks/useFoundPosts.js";
 import { useLostPosts } from "./hooks/useLostPosts.js";
 import { useMasterData } from "./hooks/useMasterData.js";
 import { useRouter } from "./hooks/useRouter.js";
+import { claimFoundPost } from "./api/posts.js";
 
 const MATCH_THRESHOLD = 70;
 const PUBLIC_FOUND_STATUSES = new Set(["approved", "matched"]);
+const PUBLIC_LOST_STATUSES = new Set(["published", "matched"]);
 const HOME_STATUS_ALL = "all";
 const APPROVAL_STATUSES = new Set(["awaiting_handover", "pending_approval"]);
 const REVIEW_ROLES = new Set(["teacher"]);
@@ -43,6 +46,7 @@ function App() {
   const [activeHomeStatus, setActiveHomeStatus] = useState(HOME_STATUS_ALL);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedItemId, setSelectedItemId] = useState(null);
+  const [matchFocus, setMatchFocus] = useState(null);
 
   // ── Data layer ────────────────────────────────────────────────────────────
   const appData = useAppData();
@@ -58,6 +62,7 @@ function App() {
     setLostReports,
     matchRows,
     returnRecords,
+    claimRequests,
     appLoading,
     appError,
     masterDataLoading,
@@ -78,6 +83,12 @@ function App() {
   const canReview = currentUser ? REVIEW_ROLES.has(currentUser.role) : false;
   const { currentPage, navigateToPage } = useRouter({ currentUser, canReview, setToast });
 
+  useEffect(() => {
+    if (currentPage !== "matching" && matchFocus) {
+      setMatchFocus(null);
+    }
+  }, [currentPage, matchFocus]);
+
   // ── Computed options ───────────────────────────────────────────────────────
   const categoryFormOptions = useMemo(() => activeMasterNames(itemCategories), [itemCategories]);
   const locationOptions = useMemo(() => activeMasterNames(campusLocations), [campusLocations]);
@@ -91,7 +102,6 @@ function App() {
       { label: "ທັງໝົດ", value: HOME_STATUS_ALL },
       { label: lostStatusLabel("published"), value: "published" },
       { label: statusMeta.approved.label, value: "approved" },
-      { label: statusMeta.matched.label, value: "matched" },
     ],
     [],
   );
@@ -103,6 +113,7 @@ function App() {
     editingFoundId,
     appSaving,
     updateFound,
+    prefillFoundFromLost,
     submitFound,
     cancelEditFound,
     deleteFound,
@@ -132,12 +143,14 @@ function App() {
   const {
     lostForm,
     editingLostId,
+    lostSaving,
     updateLost,
     submitLost,
     cancelEditLost,
     deleteLost,
     approveLostItem: approveLostItemBase,
     rejectLostItem,
+    markLostItemFound,
   } = lostPosts;
 
   function startEditLost(id) {
@@ -166,12 +179,14 @@ function App() {
   // ── Derived/computed state ─────────────────────────────────────────────────
   const homeItems = useMemo(() => {
     const query = normalizeText(searchTerm);
+    const returnedFoundPostIds = new Set(returnRecords.map((record) => Number(record.foundPostId)).filter(Boolean));
+    const returnedLostPostIds = new Set(returnRecords.map((record) => Number(record.lostPostId)).filter(Boolean));
     const rows = [
       ...foundItems
-        .filter((item) => PUBLIC_FOUND_STATUSES.has(item.status))
+        .filter((item) => PUBLIC_FOUND_STATUSES.has(item.status) && !returnedFoundPostIds.has(Number(item.id)))
         .map((item) => ({ ...item, homeKey: `found-${item.id}`, homeType: "found", homeDate: item.foundAt })),
       ...lostReports
-        .filter((report) => ["published", "matched"].includes(report.status))
+        .filter((report) => PUBLIC_LOST_STATUSES.has(report.status) && !returnedLostPostIds.has(Number(report.id)))
         .map((report) => ({ ...report, homeKey: `lost-${report.id}`, homeType: "lost", homeDate: report.lostAt })),
     ];
 
@@ -187,7 +202,7 @@ function App() {
         return inStatus && inCategory && inSearch;
       })
       .sort((a, b) => Number(new Date(b.homeDate || 0)) - Number(new Date(a.homeDate || 0)));
-  }, [activeCategory, activeHomeStatus, foundItems, lostReports, searchTerm]);
+  }, [activeCategory, activeHomeStatus, foundItems, lostReports, returnRecords, searchTerm]);
 
   const statusCounts = useMemo(() => {
     return foundItems.reduce(
@@ -232,9 +247,9 @@ function App() {
   const notifications = useMemo(
     () =>
       buildNotifications({
-        currentUser, foundItems, lostReports, matches: matchSummaries, returnRecords,
+        currentUser, foundItems, lostReports, matches: matchSummaries, returnRecords, claimRequests,
       }),
-    [currentUser, foundItems, lostReports, matchSummaries, returnRecords],
+    [currentUser, foundItems, lostReports, matchSummaries, returnRecords, claimRequests],
   );
 
   const approvalStats = useMemo(() => {
@@ -261,24 +276,60 @@ function App() {
   }, [teacherApprovalItems]);
 
   const selectedAnnouncement = useMemo(() => {
-    const selected = selectedItemId ? homeItems.find((item) => item.homeKey === selectedItemId) : null;
-    if (selected) return selected;
+    if (selectedItemId) {
+      const selected = homeItems.find((item) => item.homeKey === selectedItemId);
+      if (selected) return selected;
+
+      const [kind, rawId] = String(selectedItemId).split("-");
+      const id = Number(rawId);
+      if (kind === "found") {
+        const found = foundItems.find((item) => Number(item.id) === id);
+        if (found) return { ...found, homeKey: selectedItemId, homeType: "found", homeDate: found.foundAt };
+      }
+      if (kind === "lost") {
+        const lost = lostReports.find((item) => Number(item.id) === id);
+        if (lost) return { ...lost, homeKey: selectedItemId, homeType: "lost", homeDate: lost.lostAt };
+      }
+    }
+
     if (currentPage === "announcement-detail") return homeItems[0] ?? null;
     return null;
-  }, [currentPage, homeItems, selectedItemId]);
+  }, [currentPage, foundItems, homeItems, lostReports, selectedItemId]);
 
   // ── Approval helpers ───────────────────────────────────────────────────────
   function approveApprovalItem(item) {
     return item.kind === "lost" ? approveLostItem(item.id) : approveFoundItem(item.id);
   }
 
-  function rejectApprovalItem(item) {
-    return item.kind === "lost" ? rejectLostItem(item.id) : rejectFoundItem(item.id);
+  function rejectApprovalItem(item, reason) {
+    return item.kind === "lost" ? rejectLostItem(item.id, reason) : rejectFoundItem(item.id, reason);
   }
 
   function showAnnouncementDetail(homeKey) {
     setSelectedItemId(homeKey);
     navigateToPage("announcement-detail");
+  }
+
+  function showMatchesForAnnouncement(item) {
+    if (!item) return;
+
+    const fallbackKind = String(item.homeKey ?? "").startsWith("lost-") ? "lost" : "found";
+    setMatchFocus({
+      id: item.id,
+      kind: item.homeType ?? fallbackKind,
+      title: item.title,
+    });
+    navigateToPage("matching");
+  }
+
+  function reportFoundFromLost(item) {
+    if (!currentUser) {
+      setToast("ກະລຸນາເຂົ້າລະບົບກ່ອນແຈ້ງພົບຂອງ");
+      navigateToPage("login");
+      return;
+    }
+
+    prefillFoundFromLost(item, navigateToPage);
   }
 
   function showUsageGuide(event) {
@@ -287,6 +338,27 @@ function App() {
     window.setTimeout(() => {
       document.getElementById("how-to-use")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
+  }
+
+  async function claimFoundItem(item, claimMessage) {
+    if (!currentUser) {
+      navigateToPage("login");
+      return null;
+    }
+
+    if (currentUser.role !== "student") {
+      setToast("ຄຳຂໍຮັບສິ່ງຂອງໃຊ້ສຳລັບນັກສຶກສາເທົ່ານັ້ນ");
+      return null;
+    }
+
+    const claim = await claimFoundPost(item.id, {
+      claimantMemberId: currentUser.id,
+      claimMessage,
+    });
+
+    await loadAppData();
+    setToast("ສົ່ງຄຳຂໍຮັບແລ້ວ ກະລຸນາໄປຢືນຢັນຕົວຕົນທີ່ຫ້ອງຄຸ້ມຄອງ");
+    return claim;
   }
 
   // ── Page renderer ──────────────────────────────────────────────────────────
@@ -306,7 +378,17 @@ function App() {
     }
 
     if (currentPage === "announcement-detail") {
-      return <AnnouncementDetailPage canReview={canReview} item={selectedAnnouncement} />;
+      return (
+        <AnnouncementDetailPage
+          canViewMatches={Boolean(currentUser)}
+          claimRequests={claimRequests}
+          currentUser={currentUser}
+          item={selectedAnnouncement}
+          onClaimFound={claimFoundItem}
+          onReportFound={reportFoundFromLost}
+          onViewMatches={showMatchesForAnnouncement}
+        />
+      );
     }
 
     if (currentPage === "dashboard") {
@@ -328,6 +410,21 @@ function App() {
       );
     }
 
+    if (currentPage === "my-items") {
+      return (
+        <MyItemsPage
+          categoryOptions={categoryFilterOptions}
+          currentUser={currentUser}
+          foundItems={foundItems}
+          lostReports={lostReports}
+          onDeleteFound={deleteFound}
+          onDeleteLost={deleteLost}
+          onEditFound={startEditFound}
+          onEditLost={startEditLost}
+        />
+      );
+    }
+
     if (currentPage === "notifications") {
       return <NotificationsPage currentUser={currentUser} notifications={notifications} />;
     }
@@ -341,6 +438,7 @@ function App() {
           matches={matchSummaries}
           members={memberList}
           returnRecords={returnRecords}
+          claimRequests={claimRequests}
         />
       );
     }
@@ -390,12 +488,14 @@ function App() {
       return (
         <TeacherApprovalPage
           categoryOptions={categoryFilterOptions}
+          claimRequests={claimRequests}
           items={teacherApprovalItems}
           onApprove={approveApprovalItem}
           onMoveToApproval={moveToApproval}
+          onMarkLostFound={markLostItemFound}
           onReject={rejectApprovalItem}
           onReturn={returnFoundItem}
-          saving={appSaving}
+          saving={appSaving || lostSaving}
           stats={approvalStats}
           students={memberList.filter((member) => member.role === "student" && member.isActive !== false)}
         />
@@ -434,8 +534,11 @@ function App() {
       return (
         <MatchingPage
           currentUser={currentUser}
+          focusedItem={matchFocus}
           matches={matchSummaries}
+          onClearFocus={() => setMatchFocus(null)}
           onViewFound={(foundPostId) => showAnnouncementDetail(`found-${foundPostId}`)}
+          onViewLost={(lostPostId) => showAnnouncementDetail(`lost-${lostPostId}`)}
         />
       );
     }
@@ -445,7 +548,6 @@ function App() {
         activeCategory={activeCategory}
         appError={appError}
         appLoading={appLoading}
-        canReview={canReview}
         categoryFilterOptions={categoryFilterOptions}
         foundCount={foundItems.length}
         homeItems={homeItems}

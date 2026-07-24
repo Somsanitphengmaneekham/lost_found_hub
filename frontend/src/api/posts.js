@@ -5,8 +5,10 @@ import {
   localApproveLostPost,
   localCreateFoundPost,
   localCreateLostPost,
+  localClaimFoundPost,
   localDeleteFoundPost,
   localDeleteLostPost,
+  localMarkLostPostFound,
   localMoveFoundToApproval,
   localRejectFoundPost,
   localReturnFoundPost,
@@ -94,7 +96,7 @@ export async function rejectFoundPost(id, rejectedByMemberId, reason = "") {
       body: JSON.stringify({ rejectedByMemberId, reason }),
     });
   } catch (error) {
-    if (shouldUseLocalFallback(error)) return localRejectFoundPost(id);
+    if (shouldUseLocalFallback(error)) return localRejectFoundPost(id, reason);
     throw error;
   }
 }
@@ -107,6 +109,18 @@ export async function returnFoundPost(id, body) {
     });
   } catch (error) {
     if (shouldUseLocalFallback(error)) return localReturnFoundPost(id, body);
+    throw error;
+  }
+}
+
+export async function claimFoundPost(id, body) {
+  try {
+    return await request(`/api/found-posts/${id}/claim`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    if (shouldUseLocalFallback(error)) return localClaimFoundPost(id, body);
     throw error;
   }
 }
@@ -146,6 +160,18 @@ export async function approveLostPost(id, approvedByMemberId) {
   }
 }
 
+export async function markLostPostFound(id, markedByMemberId) {
+  try {
+    return await request(`/api/lost-posts/${id}/mark-found`, {
+      method: "POST",
+      body: JSON.stringify({ markedByMemberId }),
+    });
+  } catch (error) {
+    if (shouldUseLocalFallback(error)) return localMarkLostPostFound(id, markedByMemberId);
+    throw error;
+  }
+}
+
 export async function rejectLostPost(id, rejectedByMemberId, reason = "") {
   try {
     return await request(`/api/lost-posts/${id}/reject`, {
@@ -153,7 +179,7 @@ export async function rejectLostPost(id, rejectedByMemberId, reason = "") {
       body: JSON.stringify({ rejectedByMemberId, reason }),
     });
   } catch (error) {
-    if (shouldUseLocalFallback(error)) return localRejectLostPost(id);
+    if (shouldUseLocalFallback(error)) return localRejectLostPost(id, reason);
     throw error;
   }
 }
