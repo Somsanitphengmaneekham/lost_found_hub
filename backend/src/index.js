@@ -5,8 +5,10 @@ import { registerAuthRoutes } from "./routes/auth-routes.js";
 import { registerBootstrapRoutes } from "./routes/bootstrap-routes.js";
 import { registerMasterDataRoutes } from "./routes/master-data-routes.js";
 import { registerMatchesRoutes } from "./routes/matches-routes.js";
+import { registerNotificationsRoutes } from "./routes/notifications-routes.js";
 import { registerPostsRoutes } from "./routes/posts-routes.js";
 import { registerUploadRoutes } from "./routes/upload-routes.js";
+import { ensureNotificationSchema } from "./services/notification-store.js";
 import { mapMysqlError } from "./utils/shared.js";
 
 const app = express();
@@ -94,6 +96,7 @@ registerMasterDataRoutes(app, pool);
 registerAuthRoutes(app, pool);
 registerPostsRoutes(app, pool);
 registerMatchesRoutes(app, pool);
+registerNotificationsRoutes(app, pool);
 
 registerBootstrapRoutes(app, pool, {
   queryCategories: async (db) => {
@@ -323,6 +326,8 @@ async function fetchFoundPosts(db) {
       approver.username AS approvedBy,
       fp.approved_at AS approvedAt,
       fp.reject_reason AS rejectReason,
+      fp.created_at AS createdAt,
+      fp.updated_at AS updatedAt,
       CONCAT(finder.first_name, ' ', finder.last_name) AS finderName,
       COALESCE(finder.phone, finder.email) AS finderEmail,
       (
@@ -411,7 +416,9 @@ async function attachPostImages(db, rows, postIdColumn) {
 }
 
 async function fetchMatches(db) {
+  const { ensureNotificationSchema } = await import("./services/notification-store.js");
   const { calculateMatchScore, rebuildAllMatches } = await import("./services/weightedScoreMatching.js");
+  await ensureNotificationSchema(db);
   await rebuildAllMatches(db);
 
   const [rows] = await db.query(`
@@ -420,6 +427,7 @@ async function fetchMatches(db) {
       m.lost_post_id,
       m.found_post_id,
       m.match_score,
+      COALESCE(m.status, 'suggested') AS status,
       m.created_at,
       lp.title AS lost_title,
       lp.description AS lost_description,
@@ -462,6 +470,7 @@ async function fetchMatches(db) {
       AND fp.deleted_at IS NULL
       AND lp.status IN ('pending_approval', 'published', 'matched')
       AND fp.status IN ('approved', 'matched')
+      AND COALESCE(m.status, 'suggested') <> 'rejected'
     ORDER BY m.match_score DESC
   `);
 
@@ -492,7 +501,7 @@ async function fetchMatches(db) {
       lostPostId: row.lost_post_id,
       foundPostId: row.found_post_id,
       matchScore: Number(row.match_score),
-      status: "suggested",
+      status: row.status || "suggested",
       createdAt: row.created_at,
       reasons: calculateMatchScore(lost, found).reasons,
       lost: {
@@ -538,5 +547,8 @@ app.use((error, _req, res, _next) => {
 });
 
 app.listen(port, () => {
+  ensureNotificationSchema(pool)
+    .then(() => console.log("Notification schema ready"))
+    .catch((error) => console.error("Failed to ensure notification schema", error?.message || error));
   console.log(`Lost & Found API running at http://localhost:${port}`);
 });

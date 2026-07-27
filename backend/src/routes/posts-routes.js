@@ -1,10 +1,14 @@
 import { resolveCategoryId, resolveLocationId } from "../services/lookups.js";
 import {
+  notifyAuthorOfSubmissionPending,
+  notifyClaimantOfDecision,
+  notifyClaimantOfReturn,
   notifyLostOwnerItemFound,
   notifyLostOwnersOfFoundMatches,
   notifyTeachersOfClaimRequest,
   notifyPostAuthorOfDecision,
   notifyTeachersOfPostSubmission,
+  notifyTeachersOfReturnNeeded,
 } from "../services/post-notification-service.js";
 import {
   ensureReturnRecordSecurityColumns,
@@ -47,6 +51,8 @@ const FOUND_SELECT = `
     approver.username AS approvedBy,
     fp.approved_at AS approvedAt,
     fp.reject_reason AS rejectReason,
+    fp.created_at AS createdAt,
+    fp.updated_at AS updatedAt,
     CONCAT(finder.first_name, ' ', finder.last_name) AS finderName,
     COALESCE(fp.description, finder.email) AS finderContact,
     COALESCE(finder.phone, finder.email) AS finderEmail,
@@ -403,6 +409,10 @@ export function registerPostsRoutes(app, pool) {
         notifyTeachersOfPostSubmission(pool, { postType: "found", post }),
         `found-post-submitted:${post.id}`,
       );
+      dispatchEmailNotification(
+        notifyAuthorOfSubmissionPending(pool, { postType: "found", post }),
+        `found-post-pending:${post.id}`,
+      );
     } catch (error) {
       next(error);
     }
@@ -671,8 +681,15 @@ export function registerPostsRoutes(app, pool) {
       const evidence = normalizeReturnEvidence(req.body);
       const currentPost = await foundAccessRow(connection, id);
 
+      if (currentPost.status === "returned") {
+        throw createHttpError("ລາຍການນີ້ບັນທຶກການຄືນຂອງໄປແລ້ວ", 409);
+      }
+
       if (!["approved", "matched"].includes(currentPost.status)) {
-        throw createHttpError("ສາມາດບັນທຶກການຄືນໄດ້ສະເພາະລາຍການທີ່ອະນຸມັດແລ້ວ", 409);
+        throw createHttpError(
+          `ສາມາດບັນທຶກການຄືນໄດ້ສະເພາະລາຍການທີ່ອະນຸມັດແລ້ວ (ສະຖານະປັດຈຸບັນ: ${currentPost.status})`,
+          409,
+        );
       }
 
       let receiver = null;
@@ -859,6 +876,16 @@ export function registerPostsRoutes(app, pool) {
           returnedAt: new Date().toISOString(),
         },
       });
+
+      if (claimRequestId) {
+        const claim = await claimRequestDetail(pool, claimRequestId);
+        if (claim) {
+          dispatchEmailNotification(
+            notifyClaimantOfReturn(pool, { claim, foundTitle: postRows[0]?.title || claim.foundTitle }),
+            `claim-request-returned:${claim.id}`,
+          );
+        }
+      }
     } catch (error) {
       await connection.rollback();
       next(error);
@@ -960,6 +987,10 @@ export function registerPostsRoutes(app, pool) {
       dispatchEmailNotification(
         notifyTeachersOfPostSubmission(pool, { postType: "lost", post }),
         `lost-post-submitted:${post.id}`,
+      );
+      dispatchEmailNotification(
+        notifyAuthorOfSubmissionPending(pool, { postType: "lost", post }),
+        `lost-post-pending:${post.id}`,
       );
     } catch (error) {
       next(error);
@@ -1080,7 +1111,7 @@ export function registerPostsRoutes(app, pool) {
       await requireTeacherApprover(pool, req.body.markedByMemberId);
 
       if (!["published", "matched"].includes(currentPost.status)) {
-        throw createHttpError("lost post must be published before it can be marked as found", 409);
+        throw createHttpError("ສາມາດປ່ຽນເປັນພົບຂອງແລ້ວໄດ້ສະເພາະປະກາດທີ່ເຜີຍແຜ່ແລ້ວ", 409);
       }
 
       await pool.execute(
@@ -1161,6 +1192,84 @@ export function registerPostsRoutes(app, pool) {
       connection.release();
     }
   });
+
+  app.post("/api/claim-requests/:id/approve", async (req, res, next) => {
+    try {
+      const id = parsePositiveId(req.params.id);
+      const verifiedBy = await requireTeacherApprover(pool, req.body.verifiedByMemberId ?? req.body.approvedByMemberId);
+      const claim = await claimRequestDetail(pool, id);
+      if (!claim) throw createHttpError("ບໍ່ພົບຄຳຂໍຮັບສິ່ງຂອງ", 404);
+      if (!["submitted", "under_review"].includes(claim.status)) {
+        throw createHttpError("ສາມາດອະນຸມັດໄດ້ສະເພາະຄຳຂໍທີ່ລໍຖ້າກວດສອບ", 409);
+      }
+
+      await pool.execute(
+        `
+          UPDATE claim_requests
+          SET status = 'approved',
+              verified_by = ?,
+              verified_at = NOW(),
+              reject_reason = NULL
+          WHERE id = ?
+        `,
+        [verifiedBy, id],
+      );
+
+      const updated = await claimRequestDetail(pool, id);
+      res.json(updated);
+      dispatchEmailNotification(
+        notifyClaimantOfDecision(pool, { claim: updated, decision: "approved" }),
+        `claim-request-approved:${id}`,
+      );
+      dispatchEmailNotification(
+        notifyTeachersOfReturnNeeded(pool, {
+          source: "ຄຳຂໍຮັບຖືກອະນຸມັດ",
+          title: updated.foundTitle,
+          detail: `${updated.claimantName || "ນັກສຶກສາ"} · ຢືນຢັນຕົວຕົນແລ້ວ ລໍຖ້າບັນທຶກຄືນຂອງ`,
+          href: updated.foundPostId ? `#approval?found=${updated.foundPostId}&claim=${updated.id}` : "#approval",
+          entityType: "claim_request",
+          entityId: updated.id,
+        }),
+        `return-needed-claim:${id}`,
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/claim-requests/:id/reject", async (req, res, next) => {
+    try {
+      const id = parsePositiveId(req.params.id);
+      const verifiedBy = await requireTeacherApprover(pool, req.body.verifiedByMemberId ?? req.body.rejectedByMemberId);
+      const rejectReason = requireRejectReason(req.body);
+      const claim = await claimRequestDetail(pool, id);
+      if (!claim) throw createHttpError("ບໍ່ພົບຄຳຂໍຮັບສິ່ງຂອງ", 404);
+      if (!["submitted", "under_review", "approved"].includes(claim.status)) {
+        throw createHttpError("ສາມາດປະຕິເສດໄດ້ສະເພາະຄຳຂໍທີ່ຍັງເປີດຢູ່", 409);
+      }
+
+      await pool.execute(
+        `
+          UPDATE claim_requests
+          SET status = 'rejected',
+              verified_by = ?,
+              verified_at = NOW(),
+              reject_reason = ?
+          WHERE id = ?
+        `,
+        [verifiedBy, rejectReason, id],
+      );
+
+      const updated = await claimRequestDetail(pool, id);
+      res.json(updated);
+      dispatchEmailNotification(
+        notifyClaimantOfDecision(pool, { claim: updated, decision: "rejected", reason: rejectReason }),
+        `claim-request-rejected:${id}`,
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
 }
 
 async function rebuildMatchesForFound(pool, foundPostId) {
@@ -1170,7 +1279,10 @@ async function rebuildMatchesForFound(pool, foundPostId) {
   );
   const found = foundRows[0];
 
-  await pool.execute(`DELETE FROM matches WHERE found_post_id = ?`, [foundPostId]);
+  await pool.execute(
+    `DELETE FROM matches WHERE found_post_id = ? AND COALESCE(status, 'suggested') = 'suggested'`,
+    [foundPostId],
+  );
 
   if (!found || !ACTIVE_FOUND_MATCH_STATUSES.has(found.status)) return [];
 
@@ -1212,15 +1324,44 @@ async function rebuildMatchesForFound(pool, foundPostId) {
     const result = calculateMatchScore(lost, found);
     if (result.score < MATCH_THRESHOLD) continue;
 
+    const [existingRows] = await pool.execute(
+      `
+        SELECT id, COALESCE(status, 'suggested') AS status, match_score
+        FROM matches
+        WHERE lost_post_id = ?
+          AND found_post_id = ?
+        LIMIT 1
+      `,
+      [lost.id, found.id],
+    );
+
+    if (existingRows.length) {
+      if (existingRows[0].status !== "rejected") {
+        saved.push({
+          id: existingRows[0].id,
+          matchId: existingRows[0].id,
+          lostPostId: lost.id,
+          foundPostId: found.id,
+          matchScore: Number(existingRows[0].match_score),
+          score: Number(existingRows[0].match_score),
+          status: existingRows[0].status,
+        });
+      }
+      continue;
+    }
+
     const [insertResult] = await pool.execute(
-      `INSERT INTO matches (lost_post_id, found_post_id, match_score) VALUES (?, ?, ?)`,
+      `INSERT INTO matches (lost_post_id, found_post_id, match_score, status) VALUES (?, ?, ?, 'suggested')`,
       [lost.id, found.id, result.score],
     );
     saved.push({
+      id: insertResult.insertId,
       matchId: insertResult.insertId,
       lostPostId: lost.id,
       foundPostId: found.id,
+      matchScore: result.score,
       score: result.score,
+      status: "suggested",
     });
   }
 

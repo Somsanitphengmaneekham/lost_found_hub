@@ -59,7 +59,7 @@ function itemDate(item) {
 }
 
 function sortDateValue(item) {
-  const time = new Date(itemDate(item) || item.createdAt || 0).getTime();
+  const time = new Date(item.createdAt || item.updatedAt || itemDate(item) || 0).getTime();
   return Number.isNaN(time) ? 0 : time;
 }
 

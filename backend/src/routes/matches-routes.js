@@ -1,4 +1,11 @@
 import { resolveLocationId } from "../services/lookups.js";
+import { ensureNotificationSchema } from "../services/notification-store.js";
+import {
+  notifyClaimantOfReturn,
+  notifyMatchConfirmed,
+  notifyMatchRejected,
+  notifyTeachersOfReturnNeeded,
+} from "../services/post-notification-service.js";
 import {
   ensureReturnRecordSecurityColumns,
   normalizeReturnEvidence,
@@ -10,6 +17,12 @@ function createHttpError(message, statusCode = 400) {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
+}
+
+function dispatchEmailNotification(task, eventName) {
+  void task.catch((error) => {
+    console.error(`[email-notification] ${eventName} failed`, error?.message || error);
+  });
 }
 
 async function requireTeacher(db, memberId) {
@@ -26,9 +39,23 @@ async function requireTeacher(db, memberId) {
   return id;
 }
 
+async function requireTeacherOrLostOwner(db, memberId, lostOwnerId) {
+  const id = parsePositiveId(memberId);
+  const [rows] = await db.execute(
+    `SELECT id, role FROM members WHERE id = ? AND is_active = 1 LIMIT 1`,
+    [id],
+  );
+  if (!rows.length) throw createHttpError("ກະລຸນາເຂົ້າລະບົບກ່ອນ", 401);
+  if (rows[0].role === "teacher" || Number(rows[0].id) === Number(lostOwnerId)) {
+    return rows[0];
+  }
+  throw createHttpError("ສາມາດຢືນຢັນ match ໄດ້ສະເພາະອາຈານ ຫຼື ເຈົ້າຂອງປະກາດຂອງສູນຫາຍ", 403);
+}
+
 export function registerMatchesRoutes(app, pool) {
   app.get("/api/matches", async (_req, res, next) => {
     try {
+      await ensureNotificationSchema(pool);
       await rebuildAllMatches(pool);
 
       const [rows] = await pool.query(`
@@ -37,6 +64,7 @@ export function registerMatchesRoutes(app, pool) {
           m.lost_post_id AS lostPostId,
           m.found_post_id AS foundPostId,
           m.match_score AS matchScore,
+          COALESCE(m.status, 'suggested') AS status,
           m.created_at AS createdAt,
           lp.title AS lostTitle,
           lp.description AS lostDescription,
@@ -79,6 +107,7 @@ export function registerMatchesRoutes(app, pool) {
           AND fp.deleted_at IS NULL
           AND lp.status IN ('pending_approval', 'published', 'matched')
           AND fp.status IN ('approved', 'matched')
+          AND COALESCE(m.status, 'suggested') <> 'rejected'
         ORDER BY m.match_score DESC, m.created_at DESC
       `);
 
@@ -111,7 +140,7 @@ export function registerMatchesRoutes(app, pool) {
             lostPostId: row.lostPostId,
             foundPostId: row.foundPostId,
             matchScore: Number(row.matchScore),
-            status: "suggested",
+            status: row.status || "suggested",
             createdAt: row.createdAt,
             reasons: scoreResult.reasons,
             lost: {
@@ -138,6 +167,136 @@ export function registerMatchesRoutes(app, pool) {
     }
   });
 
+  app.patch("/api/matches/:id", async (req, res, next) => {
+    const connection = await pool.getConnection();
+    let transactionStarted = false;
+
+    try {
+      await ensureNotificationSchema(connection);
+      const id = parsePositiveId(req.params.id);
+      const nextStatus = String(req.body.status ?? "").trim();
+      if (!["confirmed", "rejected"].includes(nextStatus)) {
+        throw createHttpError("ສະຖານະ match ຕ້ອງເປັນ confirmed ຫຼື rejected", 400);
+      }
+
+      const [matchRows] = await connection.execute(
+        `
+          SELECT
+            m.id,
+            m.lost_post_id AS lostPostId,
+            m.found_post_id AS foundPostId,
+            m.match_score AS matchScore,
+            COALESCE(m.status, 'suggested') AS status,
+            lp.title AS lostTitle,
+            lp.owner_id AS lostOwnerId,
+            fp.title AS foundTitle,
+            fp.finder_id AS foundFinderId,
+            CONCAT(owner.first_name, ' ', owner.last_name) AS lostOwnerName,
+            owner.email AS lostOwnerEmail,
+            CONCAT(finder.first_name, ' ', finder.last_name) AS foundFinderName,
+            finder.email AS foundFinderEmail
+          FROM matches m
+          INNER JOIN lost_posts lp ON lp.id = m.lost_post_id
+          INNER JOIN found_posts fp ON fp.id = m.found_post_id
+          INNER JOIN members owner ON owner.id = lp.owner_id
+          INNER JOIN members finder ON finder.id = fp.finder_id
+          WHERE m.id = ?
+            AND lp.deleted_at IS NULL
+            AND fp.deleted_at IS NULL
+          LIMIT 1
+        `,
+        [id],
+      );
+      if (!matchRows.length) throw createHttpError("ບໍ່ພົບ match", 404);
+
+      const match = matchRows[0];
+      await requireTeacherOrLostOwner(
+        connection,
+        req.body.actorId ?? req.body.memberId ?? req.body.confirmedByMemberId,
+        match.lostOwnerId,
+      );
+
+      if (match.status === nextStatus) {
+        return res.json({
+          id: match.id,
+          lostPostId: match.lostPostId,
+          foundPostId: match.foundPostId,
+          matchScore: Number(match.matchScore),
+          status: match.status,
+        });
+      }
+
+      await connection.beginTransaction();
+      transactionStarted = true;
+
+      await connection.execute(`UPDATE matches SET status = ? WHERE id = ?`, [nextStatus, id]);
+
+      if (nextStatus === "confirmed") {
+        await connection.execute(
+          `UPDATE lost_posts SET status = 'matched' WHERE id = ? AND deleted_at IS NULL AND status IN ('published', 'matched', 'pending_approval')`,
+          [match.lostPostId],
+        );
+        await connection.execute(
+          `UPDATE found_posts SET status = 'matched' WHERE id = ? AND deleted_at IS NULL AND status IN ('approved', 'matched')`,
+          [match.foundPostId],
+        );
+        await connection.execute(
+          `
+            UPDATE matches
+            SET status = 'rejected'
+            WHERE id <> ?
+              AND (lost_post_id = ? OR found_post_id = ?)
+              AND COALESCE(status, 'suggested') = 'suggested'
+          `,
+          [id, match.lostPostId, match.foundPostId],
+        );
+      }
+
+      await connection.commit();
+      transactionStarted = false;
+
+      const payload = {
+        id: match.id,
+        lostPostId: match.lostPostId,
+        foundPostId: match.foundPostId,
+        matchScore: Number(match.matchScore),
+        status: nextStatus,
+        lostTitle: match.lostTitle,
+        foundTitle: match.foundTitle,
+        lostOwnerId: match.lostOwnerId,
+        lostOwnerName: match.lostOwnerName,
+        lostOwnerEmail: match.lostOwnerEmail,
+        foundFinderId: match.foundFinderId,
+        foundFinderName: match.foundFinderName,
+        foundFinderEmail: match.foundFinderEmail,
+      };
+
+      res.json(payload);
+
+      if (nextStatus === "confirmed") {
+        dispatchEmailNotification(notifyMatchConfirmed(pool, { match: payload }), `match-confirmed:${id}`);
+        dispatchEmailNotification(
+          notifyTeachersOfReturnNeeded(pool, {
+            source: "ຢືນຢັນ match ແລ້ວ",
+            title: payload.foundTitle || payload.lostTitle,
+            detail: `${payload.lostOwnerName || "ເຈົ້າຂອງ"} · ລໍຖ້າບັນທຶກຄືນຂອງ`,
+            href: payload.foundPostId ? `#approval?found=${payload.foundPostId}` : "#approval",
+            entityType: "match",
+            entityId: payload.id,
+          }),
+          `return-needed-match:${id}`,
+        );
+      } else if (nextStatus === "rejected") {
+        dispatchEmailNotification(notifyMatchRejected(pool, { match: payload }), `match-rejected:${id}`);
+      }
+    } catch (error) {
+      if (transactionStarted) await connection.rollback();
+      next(error);
+    } finally {
+      connection.release();
+    }
+  });
+
   app.post("/api/matches/:id/return", async (req, res, next) => {
     const connection = await pool.getConnection();
 
@@ -157,9 +316,12 @@ export function registerMatchesRoutes(app, pool) {
             m.found_post_id,
             lp.owner_id AS owner_id,
             lp.status AS lost_status,
+            lp.title AS lost_title,
             fp.status AS found_status,
+            fp.title AS found_title,
             owner.student_code AS studentCode,
             owner.phone,
+            owner.email AS ownerEmail,
             CONCAT(owner.first_name, ' ', owner.last_name) AS receiverName,
             d.name_th AS departmentName
           FROM matches m
@@ -296,6 +458,21 @@ export function registerMatchesRoutes(app, pool) {
         authorizationImageUrl: evidence.authorizationImageUrl,
         returnedAt: new Date().toISOString(),
       });
+
+      dispatchEmailNotification(
+        notifyClaimantOfReturn(pool, {
+          claim: {
+            id: claimResult.insertId,
+            claimantId: receivedBy,
+            claimantEmail: match.ownerEmail,
+            claimantName: match.receiverName,
+            foundPostId: match.found_post_id,
+            foundTitle: match.found_title,
+          },
+          foundTitle: match.found_title || match.lost_title,
+        }),
+        `match-return:${id}`,
+      );
     } catch (error) {
       await connection.rollback();
       next(error);

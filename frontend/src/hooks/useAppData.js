@@ -23,6 +23,7 @@ export function useAppData() {
   const [appError, setAppError] = useState("");
   const [masterDataLoading, setMasterDataLoading] = useState(true);
   const [masterDataError, setMasterDataError] = useState("");
+  const [dataVersion, setDataVersion] = useState(0);
 
   const loadAppData = useCallback(async () => {
     setAppLoading(true);
@@ -47,6 +48,7 @@ export function useAppData() {
           identityStatus: member.identityStatus ?? "verified",
         })),
       );
+      setDataVersion((value) => value + 1);
     } catch (error) {
       const message = error.message || "ບໍ່ສາມາດໂຫຼດຂໍ້ມູນຈາກ API ໄດ້";
       setAppError(message);
@@ -82,5 +84,6 @@ export function useAppData() {
     masterDataError,
     setMasterDataError,
     loadAppData,
+    dataVersion,
   };
 }

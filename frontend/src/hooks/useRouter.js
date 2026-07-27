@@ -25,13 +25,28 @@ const STUDENT_PAGES = new Set([
 const STUDENT_ONLY_PAGES = new Set(["my-items"]);
 const TEACHER_PAGES = new Set(["approval", "master-data"]);
 
-function pageFromHash(hash) {
-  const page = String(hash ?? "").replace(/^#/, "") || "home";
-  return ROUTE_ALIASES[page] ?? page;
+function parseHash(hash) {
+  const raw = String(hash ?? "").replace(/^#/, "") || "home";
+  const [pathPart, queryPart = ""] = raw.split("?");
+  const page = ROUTE_ALIASES[pathPart] ?? pathPart;
+  const params = Object.fromEntries(new URLSearchParams(queryPart));
+  return { page, params };
 }
 
-function routeHash(page) {
-  return `#${page}`;
+function pageFromHash(hash) {
+  return parseHash(hash).page;
+}
+
+function routeHash(page, params = {}) {
+  const [pathPart, existingQuery = ""] = String(page ?? "home").replace(/^#/, "").split("?");
+  const merged = {
+    ...Object.fromEntries(new URLSearchParams(existingQuery)),
+    ...params,
+  };
+  const query = new URLSearchParams(
+    Object.entries(merged).filter(([, value]) => value !== undefined && value !== null && value !== ""),
+  ).toString();
+  return query ? `#${pathPart}?${query}` : `#${pathPart}`;
 }
 
 function pageForRole(page, currentUser, canReview) {
@@ -46,50 +61,53 @@ function pageForRole(page, currentUser, canReview) {
 }
 
 export function useRouter({ currentUser, canReview, setToast }) {
-  const [activePage, setActivePage] = useState(() => pageFromHash(window.location.hash));
+  const [routeState, setRouteState] = useState(() => parseHash(window.location.hash));
 
   const currentPage = useMemo(
-    () => pageForRole(activePage, currentUser, canReview),
-    [activePage, canReview, currentUser],
+    () => pageForRole(routeState.page, currentUser, canReview),
+    [canReview, currentUser, routeState.page],
   );
 
-  // Sync activePage เมื่อ hash เปลี่ยน
+  const routeParams = routeState.params;
+
   useEffect(() => {
     function syncActivePage() {
-      setActivePage(pageFromHash(window.location.hash));
+      setRouteState(parseHash(window.location.hash));
     }
     syncActivePage();
     window.addEventListener("hashchange", syncActivePage);
     return () => window.removeEventListener("hashchange", syncActivePage);
   }, []);
 
-  // Redirect เมื่อ role ไม่ตรงกับหน้า
   useEffect(() => {
-    if (activePage !== currentPage) {
+    if (routeState.page !== currentPage) {
       if (!currentUser && currentPage === "login") {
         setToast("ກະລຸນາເຂົ້າລະບົບ ຫຼື ສະໝັກບັນຊີກ່ອນໃຊ້ງານໜ້ານີ້");
       }
-      window.history.replaceState(null, "", routeHash(currentPage));
+      const nextHash = routeHash(currentPage, routeState.params);
+      window.history.replaceState(null, "", nextHash);
       window.dispatchEvent(new HashChangeEvent("hashchange"));
-      setActivePage(currentPage);
+      setRouteState(parseHash(nextHash));
       return;
     }
     window.setTimeout(() => {
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     }, 0);
-  }, [activePage, currentPage, currentUser, setToast]);
+  }, [currentPage, currentUser, routeState.page, routeState.params, setToast]);
 
-  function navigateToPage(page) {
-    const nextPage = pageFromHash(routeHash(page));
-    const nextHash = routeHash(nextPage);
-    setActivePage(nextPage);
+  function navigateToPage(page, params = {}) {
+    const nextHash = routeHash(page, params);
+    const parsed = parseHash(nextHash);
+    setRouteState(parsed);
     if (window.location.hash !== nextHash) {
       window.location.hash = nextHash;
+    } else {
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
     }
     window.setTimeout(() => {
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     }, 0);
   }
 
-  return { currentPage, navigateToPage };
+  return { currentPage, navigateToPage, routeParams };
 }

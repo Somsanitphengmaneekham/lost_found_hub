@@ -333,7 +333,7 @@ export function useFoundPosts({ currentUser, foundItems, loadAppData, categoryFo
       setToast("ບັນທຶກການສົ່ງຄືນເຈົ້າຂອງແລ້ວ");
     } catch (error) {
       setToast(error.message || "ບັນທຶກການສົ່ງຄືນບໍ່ສຳເລັດ");
-      throw error;
+      throw error; // TeacherApprovalPage shows this in the dialog
     } finally {
       setAppSaving(false);
     }

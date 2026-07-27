@@ -125,6 +125,20 @@ export async function claimFoundPost(id, body) {
   }
 }
 
+export async function approveClaimRequest(id, verifiedByMemberId) {
+  return request(`/api/claim-requests/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ verifiedByMemberId }),
+  });
+}
+
+export async function rejectClaimRequest(id, verifiedByMemberId, reason = "") {
+  return request(`/api/claim-requests/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ verifiedByMemberId, reason }),
+  });
+}
+
 export async function deleteFoundPost(id, actorId) {
   const actorQuery = actorId ? `?actorId=${encodeURIComponent(actorId)}` : "";
 

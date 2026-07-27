@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BadgeCheck,
   Check,
@@ -28,6 +28,8 @@ const APPROVAL_SORT_OPTIONS = [
 const APPROVAL_FILTER_OPTIONS = [
   { value: "all", label: "ທັງໝົດ" },
   { value: "needs_review", label: "ຕ້ອງກວດ" },
+  { value: "claims", label: "ຄຳຂໍຮັບ" },
+  { value: "awaiting_pickup", label: "ລໍຖ້າມາຮັບ" },
   { value: "approved", label: "ອະນຸມັດແລ້ວ" },
   { value: "returned", label: "ສົ່ງຄືນແລ້ວ" },
   { value: "rejected", label: "ປະຕິເສດ" },
@@ -43,9 +45,41 @@ function isReturnedItem(item) {
   return item.status === "returned";
 }
 
-function matchesStatusFilter(item, filter) {
+function pendingClaimRequestsForItem(claimRequests, item) {
+  if (item.kind !== "found") return [];
+
+  return (claimRequests ?? []).filter(
+    (claim) =>
+      Number(claim.foundPostId) === Number(item.id) &&
+      ["submitted", "under_review"].includes(claim.status),
+  );
+}
+
+function approvedClaimRequestsForItem(claimRequests, item) {
+  if (item.kind !== "found" || isReturnedItem(item)) return [];
+
+  return (claimRequests ?? []).filter(
+    (claim) => Number(claim.foundPostId) === Number(item.id) && claim.status === "approved",
+  );
+}
+
+function activeClaimRequestsForItem(claimRequests, item) {
+  if (item.kind !== "found") return [];
+
+  return (claimRequests ?? []).filter(
+    (claim) =>
+      Number(claim.foundPostId) === Number(item.id) &&
+      ["submitted", "under_review", "approved"].includes(claim.status),
+  );
+}
+
+function matchesStatusFilter(item, filter, claimRequests = []) {
   if (filter === "all") return true;
   if (filter === "needs_review") return APPROVAL_STATUSES.has(item.status);
+  if (filter === "claims") return pendingClaimRequestsForItem(claimRequests, item).length > 0;
+  if (filter === "awaiting_pickup") {
+    return isCompletedItem(item) && approvedClaimRequestsForItem(claimRequests, item).length > 0;
+  }
   if (filter === "approved") return isCompletedItem(item);
   if (filter === "returned") return isReturnedItem(item);
   return item.status === filter;
@@ -76,18 +110,11 @@ function personLabel(item) {
   return item.kind === "lost" ? "ຜູ້ແຈ້ງ" : "ຜູ້ພົບ";
 }
 
-function activeClaimRequestsForItem(claimRequests, item) {
-  if (item.kind !== "found") return [];
-
-  return (claimRequests ?? []).filter(
-    (claim) =>
-      Number(claim.foundPostId) === Number(item.id) &&
-      ["submitted", "under_review", "approved"].includes(claim.status),
-  );
-}
-
 function itemDateValue(item) {
-  const time = new Date(item.createdAt || item.updatedAt || item.eventAt || item.foundAt || item.lostAt || 0).getTime();
+  // Prefer when the record entered/changed in the system, not the lost/found event time
+  const time = new Date(
+    item.createdAt || item.updatedAt || item.approvedAt || item.eventAt || item.foundAt || item.lostAt || 0,
+  ).getTime();
   return Number.isNaN(time) ? 0 : time;
 }
 
@@ -123,11 +150,17 @@ function createReturnDraft() {
 export function TeacherApprovalPage({
   categoryOptions,
   claimRequests = [],
+  focusClaimId,
+  focusFoundId,
   items,
+  lostReports = [],
+  matches = [],
   onApprove,
+  onApproveClaim,
   onMarkLostFound,
   onMoveToApproval,
   onReject,
+  onRejectClaim,
   onReturn,
   saving,
   stats,
@@ -140,11 +173,17 @@ export function TeacherApprovalPage({
   const [returnDialog, setReturnDialog] = useState(null);
   const [returnDraft, setReturnDraft] = useState(createReturnDraft);
   const [returnError, setReturnError] = useState("");
+  const [returnReceiverSource, setReturnReceiverSource] = useState("");
   const [returningItemId, setReturningItemId] = useState(null);
   const [rejectDialog, setRejectDialog] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectError, setRejectError] = useState("");
+  const [claimRejectDialog, setClaimRejectDialog] = useState(null);
+  const [claimRejectReason, setClaimRejectReason] = useState("");
+  const [claimRejectError, setClaimRejectError] = useState("");
+  const [focusedItemKey, setFocusedItemKey] = useState("");
   const [page, setPage] = useState(1);
+  const focusHandledKey = useRef("");
   const query = normalizeText(approvalSearch);
 
   function openRejectDialog(item) {
@@ -191,23 +230,132 @@ export function TeacherApprovalPage({
     };
   }
 
-  function selectedReturnStudent() {
-    const studentId = Number(returnDraft.receivedByMemberId);
-    return students.find((student) => Number(student.id) === studentId) ?? null;
+  function findStudentById(memberId) {
+    return students.find((student) => Number(student.id) === Number(memberId)) ?? null;
   }
 
-  function openReturnDialog(item) {
-    const claim = activeClaimRequestsForItem(claimRequests, item)[0];
-    const suggestedStudent = students.find((student) => Number(student.id) === Number(claim?.claimantId));
+  function relatedMatchesForFound(item) {
+    return matches.filter(
+      (match) =>
+        Number(match.foundPostId) === Number(item?.id) &&
+        match.status !== "rejected" &&
+        (match.lost?.ownerId || match.lostOwnerId),
+    );
+  }
+
+  /** Owner of the item being returned (lost-post owner / approved claimant), not the finder */
+  function resolveItemOwner(item, preferredClaimId) {
+    if (!item) return { student: null, source: "" };
+
+    const relatedMatches = relatedMatchesForFound(item);
+    const preferredMatch =
+      relatedMatches.find((match) => match.status === "confirmed") ?? relatedMatches[0] ?? null;
+    const matchOwnerId = preferredMatch?.lost?.ownerId ?? preferredMatch?.lostOwnerId;
+    if (matchOwnerId) {
+      const student = findStudentById(matchOwnerId);
+      if (student) {
+        return { student, source: "ຈາກເຈົ້າຂອງປະກາດສູນຫາຍ" };
+      }
+    }
+
+    const claims = activeClaimRequestsForItem(claimRequests, item);
+    const preferredClaim = claims.find((entry) => Number(entry.id) === Number(preferredClaimId));
+    const approvedClaim = claims.find((entry) => entry.status === "approved");
+    const claim = preferredClaim ?? approvedClaim ?? claims[0] ?? null;
+
+    if (claim?.lostPostId) {
+      const lost = lostReports.find((report) => Number(report.id) === Number(claim.lostPostId));
+      if (lost?.ownerId) {
+        const student = findStudentById(lost.ownerId);
+        if (student) {
+          return { student, source: "ຈາກເຈົ້າຂອງປະກາດສູນຫາຍ" };
+        }
+      }
+    }
+
+    if (claim?.claimantId) {
+      const student = findStudentById(claim.claimantId);
+      if (student) {
+        return {
+          student,
+          source: claim.status === "approved" ? "ຈາກຄຳຂໍຮັບທີ່ອະນຸມັດແລ້ວ" : "ຈາກຄຳຂໍຮັບສິ່ງຂອງ",
+        };
+      }
+    }
+
+    return { student: null, source: "" };
+  }
+
+  function resolveReturnReceiver(item, preferredClaimId) {
+    // Default form type is "owner comes themselves" → prefer item owner first
+    const owner = resolveItemOwner(item, preferredClaimId);
+    if (owner.student) return { ...owner, claim: null };
+
+    const claims = activeClaimRequestsForItem(claimRequests, item);
+    const preferredClaim = claims.find((entry) => Number(entry.id) === Number(preferredClaimId));
+    const approvedClaim = claims.find((entry) => entry.status === "approved");
+    const claim = preferredClaim ?? approvedClaim ?? claims[0] ?? null;
+
+    if (claim?.claimantId) {
+      const student = findStudentById(claim.claimantId);
+      if (student) {
+        return {
+          student,
+          source: claim.status === "approved" ? "ຈາກຄຳຂໍຮັບທີ່ອະນຸມັດແລ້ວ" : "ຈາກຄຳຂໍຮັບສິ່ງຂອງ",
+          claim,
+        };
+      }
+    }
+
+    return { student: null, source: "", claim: null };
+  }
+
+  function selectedReturnStudent() {
+    const studentId = Number(returnDraft.receivedByMemberId);
+    return findStudentById(studentId);
+  }
+
+  function applyOwnerToReturnForm(item, preferredClaimId, currentDraft = createReturnDraft()) {
+    const resolved = resolveItemOwner(item, preferredClaimId);
+    if (!resolved.student) {
+      return {
+        draft: { ...currentDraft, receiverType: "owner" },
+        source: "",
+      };
+    }
+
+    return {
+      draft: studentReturnDraft(resolved.student, {
+        ...currentDraft,
+        receiverType: "owner",
+      }),
+      source: resolved.source || "ເຈົ້າຂອງມາຮັບເອງ",
+    };
+  }
+
+  function openReturnDialog(item, preferredClaimId) {
+    const applied = applyOwnerToReturnForm(item, preferredClaimId, createReturnDraft());
+    // If no owner found, still try claim-based fallback
+    const fallback = applied.draft.receivedByMemberId
+      ? applied
+      : (() => {
+          const resolved = resolveReturnReceiver(item, preferredClaimId);
+          return {
+            draft: studentReturnDraft(resolved.student, createReturnDraft()),
+            source: resolved.student ? resolved.source : "",
+          };
+        })();
 
     setReturnDialog(item);
-    setReturnDraft(studentReturnDraft(suggestedStudent, createReturnDraft()));
+    setReturnDraft(fallback.draft);
+    setReturnReceiverSource(fallback.source);
     setReturnError("");
   }
 
   function closeReturnDialog() {
     setReturnDialog(null);
     setReturnDraft(createReturnDraft());
+    setReturnReceiverSource("");
     setReturnError("");
   }
 
@@ -216,11 +364,46 @@ export function TeacherApprovalPage({
     setReturnError("");
   }
 
+  function selectReceiverType(nextType) {
+    if (nextType === "owner" && returnDialog) {
+      const preferredClaimId =
+        activeClaimRequestsForItem(claimRequests, returnDialog).find(
+          (claim) => Number(claim.claimantId) === Number(returnDraft.receivedByMemberId),
+        )?.id ?? focusClaimId;
+      const applied = applyOwnerToReturnForm(returnDialog, preferredClaimId, {
+        ...returnDraft,
+        receiverType: "owner",
+      });
+      setReturnDraft(applied.draft);
+      setReturnReceiverSource(applied.source || "ເຈົ້າຂອງມາຮັບເອງ");
+      setReturnError(
+        applied.draft.receivedByMemberId
+          ? ""
+          : "ຍັງບໍ່ພົບຂໍ້ມູນເຈົ້າຂອງປະກາດ — ກະລຸນາຄົ້ນຫານັກສຶກສາ",
+      );
+      return;
+    }
+
+    // Representative: hide owner details so teachers only fill the stand-in person
+    setReturnDraft((current) => ({
+      ...current,
+      receiverType: "representative",
+      receiverName: "",
+      receiverStudentCode: "",
+      receiverDepartment: "",
+      receiverPhone: "",
+      // keep receivedByMemberId (owner) for claim linking, but do not show it
+    }));
+    setReturnReceiverSource("");
+    setReturnError("");
+  }
+
   function updateReturnStudent(studentId) {
-    const student = students.find((item) => Number(item.id) === Number(studentId));
+    const student = findStudentById(studentId);
     setReturnDraft((current) =>
       student ? studentReturnDraft(student, current) : { ...current, receivedByMemberId: "" },
     );
+    setReturnReceiverSource(student ? "ເລືອກຈາກບັນຊີນັກສຶກສາ" : "");
     setReturnError("");
   }
 
@@ -228,16 +411,29 @@ export function TeacherApprovalPage({
     event.preventDefault();
     if (!returnDialog) return;
 
-    if (!returnDraft.receiverName.trim()) {
-      setReturnError("ກະລຸນາກອກຊື່ຜູ້ມາຮັບສິ່ງຂອງ");
-      return;
-    }
-    if (!returnDraft.receiverStudentCode.trim() && !returnDraft.receiverPhone.trim()) {
-      setReturnError("ກະລຸນາກອກລະຫັດນັກສຶກສາ ຫຼື ເບີໂທຜູ້ມາຮັບ");
-      return;
+    const isRepresentative = returnDraft.receiverType === "representative";
+
+    if (isRepresentative) {
+      if (
+        !returnDraft.representativeName.trim() ||
+        !returnDraft.representativePhone.trim() ||
+        !returnDraft.representativeRelation.trim() ||
+        !returnDraft.authorizationImages.length
+      ) {
+        setReturnError("ກະລຸນາກອກຂໍ້ມູນຜູ້ຮັບແທນ ແລະ ແນບຫຼັກຖານອະນຸຍາດໃຫ້ຄົບ");
+        return;
+      }
+    } else {
+      if (!returnDraft.receiverName.trim()) {
+        setReturnError("ກະລຸນາກອກຊື່ຜູ້ມາຮັບສິ່ງຂອງ");
+        return;
+      }
+      if (!returnDraft.receiverStudentCode.trim() && !returnDraft.receiverPhone.trim()) {
+        setReturnError("ກະລຸນາກອກລະຫັດນັກສຶກສາ ຫຼື ເບີໂທຜູ້ມາຮັບ");
+        return;
+      }
     }
 
-    const receivedByMemberId = returnDraft.receivedByMemberId || null;
     if (!returnDraft.identityVerified) {
       setReturnError("ກະລຸນາຢືນຢັນວ່າກວດບັດນັກສຶກສາ ຫຼື ຂໍ້ມູນແລ້ວ");
       return;
@@ -246,24 +442,29 @@ export function TeacherApprovalPage({
       setReturnError("ກະລຸນາອັບໂຫຼດຮູບຜູ້ຮັບພ້ອມສິ່ງຂອງ");
       return;
     }
-    if (
-      returnDraft.receiverType === "representative" &&
-      (!returnDraft.representativeName.trim() ||
-        !returnDraft.representativePhone.trim() ||
-        !returnDraft.representativeRelation.trim() ||
-        !returnDraft.authorizationImages.length)
-    ) {
-      setReturnError("ກະລຸນາກອກຂໍ້ມູນຜູ້ຮັບແທນ ແລະ ແນບຫຼັກຖານອະນຸຍາດໃຫ້ຄົບ");
-      return;
-    }
+
+    // Keep owner member id for linking; for representative use stand-in name/phone as receiver snapshot
+    const ownerMemberId = returnDraft.receivedByMemberId || null;
+    const submitDraft = isRepresentative
+      ? {
+          ...returnDraft,
+          receiverName: returnDraft.representativeName.trim(),
+          receiverPhone: returnDraft.representativePhone.trim(),
+          receiverStudentCode: "",
+          receiverDepartment: "",
+          receivedByMemberId: ownerMemberId,
+        }
+      : returnDraft;
 
     setReturningItemId(returnDialog.id);
     try {
       await onReturn(returnDialog.id, {
-        ...returnDraft,
-        receivedByMemberId,
+        ...submitDraft,
+        receivedByMemberId: ownerMemberId,
       });
       closeReturnDialog();
+    } catch (error) {
+      setReturnError(error?.message || "ບັນທຶກການສົ່ງຄືນບໍ່ສຳເລັດ");
     } finally {
       setReturningItemId(null);
     }
@@ -282,13 +483,45 @@ export function TeacherApprovalPage({
   const statusCounts = APPROVAL_FILTER_OPTIONS.reduce(
     (counts, option) => ({
       ...counts,
-      [option.value]: baseFilteredItems.filter((item) => matchesStatusFilter(item, option.value)).length,
+      [option.value]:
+        option.value === "claims"
+          ? (claimRequests ?? []).filter((claim) => ["submitted", "under_review"].includes(claim.status)).length
+          : option.value === "awaiting_pickup"
+            ? (claimRequests ?? []).filter((claim) => {
+                if (claim.status !== "approved") return false;
+                const found = baseFilteredItems.find(
+                  (item) => item.kind === "found" && Number(item.id) === Number(claim.foundPostId),
+                );
+                return Boolean(found && isCompletedItem(found) && !isReturnedItem(found));
+              }).length
+            : baseFilteredItems.filter((item) => matchesStatusFilter(item, option.value, claimRequests)).length,
     }),
     {},
   );
   const filteredItems = baseFilteredItems
-    .filter((item) => matchesStatusFilter(item, approvalStatus))
-    .sort((a, b) => compareApprovalItems(a, b, approvalSort));
+    .filter((item) => matchesStatusFilter(item, approvalStatus, claimRequests))
+    .sort((a, b) => {
+      if (approvalStatus === "claims") {
+        const aPending = pendingClaimRequestsForItem(claimRequests, a).length;
+        const bPending = pendingClaimRequestsForItem(claimRequests, b).length;
+        return bPending - aPending || compareApprovalItems(a, b, approvalSort);
+      }
+      if (approvalStatus === "awaiting_pickup") {
+        const aReady = approvedClaimRequestsForItem(claimRequests, a).length;
+        const bReady = approvedClaimRequestsForItem(claimRequests, b).length;
+        return bReady - aReady || compareApprovalItems(a, b, approvalSort);
+      }
+      return compareApprovalItems(a, b, approvalSort);
+    });
+
+  const isClaimWorkflowTab = approvalStatus === "claims" || approvalStatus === "awaiting_pickup";
+
+  async function handleApproveClaim(claimId) {
+    const ok = await onApproveClaim?.(claimId);
+    if (ok === false) return;
+    setApprovalStatus("awaiting_pickup");
+    setPage(1);
+  }
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / APPROVAL_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * APPROVAL_PAGE_SIZE;
@@ -300,6 +533,50 @@ export function TeacherApprovalPage({
   useEffect(() => {
     setPage(1);
   }, [approvalSearch, approvalCategory, approvalStatus, approvalSort, items.length]);
+
+  useEffect(() => {
+    if (!focusFoundId) return;
+
+    const focusKey = `${focusFoundId}:${focusClaimId || ""}`;
+    if (focusHandledKey.current === focusKey) return;
+
+    const target = items.find(
+      (item) => item.kind === "found" && Number(item.id) === Number(focusFoundId),
+    );
+    if (!target) return;
+
+    focusHandledKey.current = focusKey;
+    const focusedClaim = (claimRequests ?? []).find((claim) => Number(claim.id) === Number(focusClaimId));
+    const focusTab =
+      focusedClaim?.status === "approved"
+        ? "awaiting_pickup"
+        : focusClaimId
+          ? "claims"
+          : "needs_review";
+    setApprovalStatus(focusTab);
+    setApprovalCategory("ທັງໝົດ");
+    setApprovalSearch("");
+    setFocusedItemKey(target.approvalKey ?? `found-${target.id}`);
+
+    const ranked = [...items].sort((a, b) => compareApprovalItems(a, b, "latest"));
+    const index = ranked.findIndex(
+      (item) => item.kind === "found" && Number(item.id) === Number(focusFoundId),
+    );
+    if (index >= 0) {
+      setPage(Math.floor(index / APPROVAL_PAGE_SIZE) + 1);
+    }
+
+    window.setTimeout(() => {
+      document.getElementById(`approval-item-found-${focusFoundId}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      // Only open return dialog when the item can still be returned
+      if (["approved", "matched"].includes(target.status)) {
+        openReturnDialog(target, focusClaimId);
+      }
+    }, 180);
+  }, [focusFoundId, focusClaimId, items, claimRequests, students, matches, lostReports]);
 
   function goToPage(nextPage) {
     setPage(Math.min(totalPages, Math.max(1, nextPage)));
@@ -347,6 +624,8 @@ export function TeacherApprovalPage({
           <select onChange={(event) => setApprovalStatus(event.target.value)} value={approvalStatus}>
             <option value="all">ລາຍການທັງໝົດ</option>
             <option value="needs_review">ລໍຖ້າກວດສອບທັງໝົດ</option>
+            <option value="claims">ຄຳຂໍຮັບ (ຂອງທີ່ພົບ)</option>
+            <option value="awaiting_pickup">ລໍຖ້າມາຮັບ (ອະນຸມັດແລ້ວ)</option>
             <option value="pending_approval">ລໍຖ້າອະນຸມັດ</option>
             <option value="awaiting_handover">ລໍຖ້າຮັບສິ່ງຂອງ</option>
             <option value="approved">ອະນຸມັດແລ້ວ</option>
@@ -371,6 +650,7 @@ export function TeacherApprovalPage({
           {APPROVAL_FILTER_OPTIONS.map((option) => (
             <button
               className={approvalStatus === option.value ? "active" : ""}
+              data-tab={option.value}
               key={option.value}
               onClick={() => setApprovalStatus(option.value)}
               type="button"
@@ -382,10 +662,19 @@ export function TeacherApprovalPage({
         </div>
         <div className="approval-list-head">
           <div>
-            <strong>ລາຍການຕາມໂຕກອງ</strong>
+            <strong>
+              {approvalStatus === "claims"
+                ? "ຄຳຂໍຮັບສິ່ງຂອງ (ປະກາດຂອງທີ່ພົບ)"
+                : approvalStatus === "awaiting_pickup"
+                  ? "ລໍຖ້ານັກສຶກສາມາຮັບຂອງ"
+                  : "ລາຍການຕາມໂຕກອງ"}
+            </strong>
             <span>
-              ສະແດງ {firstVisibleNumber.toLocaleString("lo-LA")}-{lastVisibleNumber.toLocaleString("lo-LA")} ຈາກ{" "}
-              {filteredItems.length.toLocaleString("lo-LA")} ລາຍການ
+              {approvalStatus === "claims"
+                ? "ສະເພາະນັກສຶກສາຂໍຮັບລາຍການທີ່ພົບ — ກວດຕົວຕົນກ່ອນອະນຸມັດ ຫຼື ປະຕິເສດ"
+                : approvalStatus === "awaiting_pickup"
+                  ? "ອະນຸມັດຄຳຂໍແລ້ວ — ເມື່ອນັກສຶກສາມາຮັບຂອງໃຫ້ບັນທຶກຄືນຂອງ"
+                  : `ສະແດງ ${firstVisibleNumber.toLocaleString("lo-LA")}-${lastVisibleNumber.toLocaleString("lo-LA")} ຈາກ ${filteredItems.length.toLocaleString("lo-LA")} ລາຍການ`}
             </span>
           </div>
           <span>ໜ້າ {currentPage.toLocaleString("lo-LA")} / {totalPages.toLocaleString("lo-LA")}</span>
@@ -396,12 +685,26 @@ export function TeacherApprovalPage({
         <div className="teacher-approval-list">
           {visibleItems.length ? (
             visibleItems.map((item) => (
-              <article className="teacher-approval-card" key={item.approvalKey ?? `${item.kind}-${item.id}`}>
+              <article
+                className={`teacher-approval-card${focusedItemKey === (item.approvalKey ?? `${item.kind}-${item.id}`) ? " focused" : ""}${isClaimWorkflowTab ? " claim-queue-card" : ""}${approvalStatus === "awaiting_pickup" ? " pickup-queue-card" : ""}`}
+                id={`approval-item-${item.kind}-${item.id}`}
+                key={item.approvalKey ?? `${item.kind}-${item.id}`}
+              >
                 <img className="teacher-approval-image" src={item.image} alt={item.title} />
                 <div className="teacher-approval-body">
                   <div className="teacher-card-meta">
                     <span className={`status-chip ${statusTone(item)}`}>{statusLabel(item)}</span>
                     <span className="status-chip slate">{kindLabel(item)}</span>
+                    {pendingClaimRequestsForItem(claimRequests, item).length > 0 && (
+                      <span className="status-chip amber">
+                        ຄຳຂໍຮັບ {pendingClaimRequestsForItem(claimRequests, item).length.toLocaleString("lo-LA")}
+                      </span>
+                    )}
+                    {approvedClaimRequestsForItem(claimRequests, item).length > 0 && (
+                      <span className="status-chip teal">
+                        ລໍຖ້າມາຮັບ {approvedClaimRequestsForItem(claimRequests, item).length.toLocaleString("lo-LA")}
+                      </span>
+                    )}
                     <small>{item.date} · {item.time}</small>
                   </div>
                   <h3>{item.title}</h3>
@@ -409,7 +712,9 @@ export function TeacherApprovalPage({
                     <MapPin size={15} />
                     {item.location}
                   </p>
-                  <p className="teacher-description">"{item.description}"</p>
+                  {!isClaimWorkflowTab && (
+                    <p className="teacher-description">"{item.description}"</p>
+                  )}
                   <dl className="teacher-detail-list">
                     <div>
                       <dt>{personLabel(item)}</dt>
@@ -420,7 +725,89 @@ export function TeacherApprovalPage({
                       <dd>{joinDetail(item.color, item.brand)}</dd>
                     </div>
                   </dl>
+                  {approvalStatus === "claims" && pendingClaimRequestsForItem(claimRequests, item).length > 0 && (
+                    <div className="approval-claim-queue">
+                      <div className="approval-claim-queue-head">
+                        <strong>ຄຳຂໍຮັບລໍຖ້າກວດສອບ</strong>
+                        <span>
+                          {pendingClaimRequestsForItem(claimRequests, item).length.toLocaleString("lo-LA")} ຄຳຂໍ
+                        </span>
+                      </div>
+                      {pendingClaimRequestsForItem(claimRequests, item).map((claim) => (
+                        <div className="approval-claim-queue-row" key={claim.id}>
+                          <div className="approval-claim-person">
+                            <span className="approval-claim-name">
+                              {claim.claimantName || claim.claimantUsername || "ນັກສຶກສາ"}
+                            </span>
+                            <small className="approval-claim-message">
+                              {claim.claimMessage || "ຂໍຮັບສິ່ງຂອງທີ່ພົບ"}
+                            </small>
+                            <span className="approval-claim-status">ລໍຖ້າກວດຕົວຕົນ</span>
+                          </div>
+                          <div className="claim-decision-actions claim-decision-actions-stack">
+                            <button
+                              className="approve-button"
+                              disabled={saving}
+                              onClick={() => handleApproveClaim(claim.id)}
+                              type="button"
+                            >
+                              <Check size={15} />
+                              ອະນຸມັດຄຳຂໍ
+                            </button>
+                            <button
+                              className="reject-button"
+                              disabled={saving}
+                              onClick={() => {
+                                setClaimRejectDialog(claim);
+                                setClaimRejectReason("");
+                                setClaimRejectError("");
+                              }}
+                              type="button"
+                            >
+                              <X size={15} />
+                              ປະຕິເສດຄຳຂໍ
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {approvalStatus === "awaiting_pickup" && approvedClaimRequestsForItem(claimRequests, item).length > 0 && (
+                    <div className="approval-claim-queue approval-pickup-queue">
+                      <div className="approval-claim-queue-head">
+                        <strong>ອະນຸມັດແລ້ວ — ລໍຖ້າມາຮັບຂອງ</strong>
+                        <span>
+                          {approvedClaimRequestsForItem(claimRequests, item).length.toLocaleString("lo-LA")} ຄົນ
+                        </span>
+                      </div>
+                      {approvedClaimRequestsForItem(claimRequests, item).map((claim) => (
+                        <div className="approval-claim-queue-row" key={claim.id}>
+                          <div className="approval-claim-person">
+                            <span className="approval-claim-name">
+                              {claim.claimantName || claim.claimantUsername || "ນັກສຶກສາ"}
+                            </span>
+                            <small className="approval-claim-message">
+                              ອະນຸມັດຕົວຕົນແລ້ວ — ເມື່ອນັກສຶກສາມາຮັບຂອງໃຫ້ບັນທຶກຄືນ
+                            </small>
+                            <span className="approval-claim-status approval-claim-status-ready">ພ້ອມສົ່ງຄືນ</span>
+                          </div>
+                          <div className="claim-decision-actions claim-decision-actions-stack">
+                            <button
+                              className="return-button"
+                              disabled={saving || returningItemId === item.id}
+                              onClick={() => openReturnDialog(item, claim.id)}
+                              type="button"
+                            >
+                              <PackageCheck size={15} />
+                              {returningItemId === item.id ? "ກຳລັງບັນທຶກ..." : "ມາຮັບຂອງແລ້ວ — ບັນທຶກຄືນ"}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
+                {!isClaimWorkflowTab && (
                 <div className="teacher-approval-actions">
                   {item.kind === "found" && item.status === "awaiting_handover" && (
                     <button className="approve-button" onClick={() => onMoveToApproval(item.id)} type="button">
@@ -447,13 +834,38 @@ export function TeacherApprovalPage({
                           <span>ນັກສຶກສາທີ່ຂໍຮັບ</span>
                           <div>
                             {activeClaimRequestsForItem(claimRequests, item).map((claim) => (
-                              <button
-                                key={claim.id}
-                                onClick={() => openReturnDialog(item)}
-                                type="button"
-                              >
-                                {claim.claimantName || claim.claimantUsername || "ນັກສຶກສາ"}
-                              </button>
+                              <div className="claim-decision-row" key={claim.id}>
+                                <button onClick={() => openReturnDialog(item, claim.id)} type="button">
+                                  {claim.claimantName || claim.claimantUsername || "ນັກສຶກສາ"}
+                                  <small>{claim.status}</small>
+                                </button>
+                                {["submitted", "under_review"].includes(claim.status) && (
+                                  <div className="claim-decision-actions">
+                                    <button
+                                      className="approve-button"
+                                      disabled={saving}
+                                      onClick={() => handleApproveClaim(claim.id)}
+                                      type="button"
+                                    >
+                                      <Check size={15} />
+                                      ອະນຸມັດຄຳຂໍ
+                                    </button>
+                                    <button
+                                      className="reject-button"
+                                      disabled={saving}
+                                      onClick={() => {
+                                        setClaimRejectDialog(claim);
+                                        setClaimRejectReason("");
+                                        setClaimRejectError("");
+                                      }}
+                                      type="button"
+                                    >
+                                      <X size={15} />
+                                      ປະຕິເສດຄຳຂໍ
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -477,21 +889,37 @@ export function TeacherApprovalPage({
                       type="button"
                     >
                       <BadgeCheck size={17} />
-                      ແຈ້ງເຈົ້າຂອງວ່າພົບແລ້ວ
+                      ປ່ຽນເປັນພົບຂອງແລ້ວ
                     </button>
                   )}
                   {item.kind === "lost" && item.status === "matched" && (
-                    <span className="approval-result purple">ແຈ້ງເຈົ້າຂອງແລ້ວ</span>
+                    <span className="approval-result purple">ພົບຂອງແລ້ວ · ເຊື່ອງຈາກໜ້າຫຼັກແລ້ວ</span>
                   )}
                   {isReturnedItem(item) && (
                     <span className="approval-result returned">ສົ່ງຄືນເຈົ້າຂອງແລ້ວ</span>
                   )}
                   {item.status === "rejected" && <span className="approval-result red">ປະຕິເສດແລ້ວ</span>}
                 </div>
+                )}
               </article>
             ))
           ) : (
-            <EmptyState title="ບໍ່ພົບລາຍການຕາມໂຕກອງ" description="ລອງປ່ຽນຄຳຄົ້ນຫາ ໝວດໝູ່ ຫຼື ສະຖານະທີ່ຕ້ອງການກວດສອບ" />
+            <EmptyState
+              title={
+                approvalStatus === "claims"
+                  ? "ບໍ່ມີຄຳຂໍຮັບລໍຖ້າກວດ"
+                  : approvalStatus === "awaiting_pickup"
+                    ? "ບໍ່ມີລາຍການລໍຖ້າມາຮັບ"
+                    : "ບໍ່ພົບລາຍການຕາມໂຕກອງ"
+              }
+              description={
+                approvalStatus === "claims"
+                  ? "ເມື່ອນັກສຶກສາຂໍຮັບປະກາດຂອງທີ່ພົບ ລາຍການຈະສະແດງຢູ່ແຖບນີ້"
+                  : approvalStatus === "awaiting_pickup"
+                    ? "ເມື່ອອະນຸມັດຄຳຂໍຮັບແລ້ວ ລາຍການຈະມາລໍຖ້າບັນທຶກຄືນຂອງຢູ່ນີ້"
+                    : "ລອງປ່ຽນຄຳຄົ້ນຫາ ໝວດໝູ່ ຫຼື ສະຖານະທີ່ຕ້ອງການກວດສອບ"
+              }
+            />
           )}
           {showPagination && (
             <div className="pagination-controls approval-pagination" aria-label="Approval pagination">
@@ -555,7 +983,7 @@ export function TeacherApprovalPage({
             </p>
             <p>
               <CircleHelp size={16} />
-              ເມື່ອຄືນຂອງ ຕ້ອງເລືອກນັກສຶກສາຜູ້ຮັບຄືນໃຫ້ຖືກຕ້ອງກ່ອນບັນທຶກ.
+              ເມື່ອອະນຸມັດຄຳຂໍຮັບແລ້ວ ໄປແຖບ “ລໍຖ້າມາຮັບ” — ນັກສຶກສາມາຮັບຂອງແລ້ວຈຶ່ງບັນທຶກຄືນ.
             </p>
           </article>
         </aside>
@@ -573,90 +1001,13 @@ export function TeacherApprovalPage({
               ກ່ອນກົດສົ່ງຄືນ ອາຈານຕ້ອງກວດບັດ/ຂໍ້ມູນ ແລະ ບັນທຶກຮູບຜູ້ຮັບພ້ອມສິ່ງຂອງເປັນຫຼັກຖານ.
             </p>
 
-            <div className="return-evidence-owner return-evidence-owner-legacy">
-              <span>ນັກສຶກສາຜູ້ຮັບຄືນ</span>
-              <strong>
-                {currentReturnStudent?.fullName ||
-                  currentReturnStudent?.name ||
-                  currentReturnStudent?.username ||
-                  "-"}
-              </strong>
-              <small>{currentReturnStudent?.studentCode || currentReturnStudent?.student_code || ""}</small>
-            </div>
-
-            <div className="return-evidence-owner">
-              <span>ຂໍ້ມູນຜູ້ມາຮັບສິ່ງຂອງ</span>
-              <strong>{currentReturnStudent ? "ດຶງຂໍ້ມູນຈາກບັນຊີນັກສຶກສາແລ້ວ" : "ກອກຂໍ້ມູນດ້ວຍຕົນເອງໄດ້"}</strong>
-              <small>ຄົ້ນຫານັກສຶກສາເພື່ອເຕີມຂໍ້ມູນໄວຂຶ້ນ ຫຼື ກອກຂໍ້ມູນຜູ້ມາຮັບເອງ.</small>
-            </div>
-
-            <div className="return-student-picker">
-              {activeClaimRequestsForItem(claimRequests, returnDialog).length > 0 && (
-                <div className="return-claim-suggestions">
-                  <span>ລາຍຊື່ທີ່ຂໍຮັບຂອງ</span>
-                  <div>
-                    {activeClaimRequestsForItem(claimRequests, returnDialog).map((claim) => (
-                      <button
-                        key={claim.id}
-                        onClick={() => updateReturnStudent(claim.claimantId)}
-                        type="button"
-                      >
-                        {claim.claimantName || claim.claimantUsername || "ນັກສຶກສາ"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <StudentSearchCombobox
-                itemTitle={returnDialog.title}
-                onChange={updateReturnStudent}
-                students={students}
-                value={returnDraft.receivedByMemberId}
-              />
-            </div>
-
-            <div className="return-evidence-grid">
-              <label className="return-evidence-field">
-                <span>ຊື່ຜູ້ມາຮັບ *</span>
-                <input
-                  onChange={(event) => updateReturnDraft("receiverName", event.target.value)}
-                  type="text"
-                  value={returnDraft.receiverName}
-                />
-              </label>
-              <label className="return-evidence-field">
-                <span>ລະຫັດນັກສຶກສາ</span>
-                <input
-                  onChange={(event) => updateReturnDraft("receiverStudentCode", event.target.value)}
-                  type="text"
-                  value={returnDraft.receiverStudentCode}
-                />
-              </label>
-              <label className="return-evidence-field">
-                <span>ພາກວິຊາ / ຫ້ອງຮຽນ</span>
-                <input
-                  onChange={(event) => updateReturnDraft("receiverDepartment", event.target.value)}
-                  type="text"
-                  value={returnDraft.receiverDepartment}
-                />
-              </label>
-              <label className="return-evidence-field">
-                <span>ເບີໂທ</span>
-                <input
-                  onChange={(event) => updateReturnDraft("receiverPhone", event.target.value)}
-                  type="tel"
-                  value={returnDraft.receiverPhone}
-                />
-              </label>
-            </div>
-
             <fieldset className="return-type-grid">
               <legend>ປະເພດຜູ້ມາຮັບ</legend>
               <label className={`return-type-option ${returnDraft.receiverType === "owner" ? "active" : ""}`}>
                 <input
                   checked={returnDraft.receiverType === "owner"}
                   name="receiverType"
-                  onChange={() => updateReturnDraft("receiverType", "owner")}
+                  onChange={() => selectReceiverType("owner")}
                   type="radio"
                   value="owner"
                 />
@@ -666,7 +1017,7 @@ export function TeacherApprovalPage({
                 <input
                   checked={returnDraft.receiverType === "representative"}
                   name="receiverType"
-                  onChange={() => updateReturnDraft("receiverType", "representative")}
+                  onChange={() => selectReceiverType("representative")}
                   type="radio"
                   value="representative"
                 />
@@ -674,41 +1025,171 @@ export function TeacherApprovalPage({
               </label>
             </fieldset>
 
+            {returnDraft.receiverType === "owner" && (
+              <>
+                <div className={`return-evidence-owner ${currentReturnStudent ? "is-filled" : ""}`}>
+                  <span>ຂໍ້ມູນເຈົ້າຂອງປະກາດ</span>
+                  {currentReturnStudent ? (
+                    <div className="return-receiver-preview">
+                      {(currentReturnStudent.avatarUrl || currentReturnStudent.cardImageUrl) && (
+                        <img
+                          alt=""
+                          className="return-receiver-avatar"
+                          src={currentReturnStudent.avatarUrl || currentReturnStudent.cardImageUrl}
+                        />
+                      )}
+                      <div>
+                        <strong>
+                          {currentReturnStudent.fullName ||
+                            currentReturnStudent.name ||
+                            currentReturnStudent.username}
+                        </strong>
+                        <small>
+                          {[
+                            currentReturnStudent.studentCode || currentReturnStudent.username,
+                            currentReturnStudent.department,
+                            currentReturnStudent.phone,
+                            currentReturnStudent.email,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </small>
+                        {returnReceiverSource ? <em>{returnReceiverSource}</em> : null}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <strong>ຍັງບໍ່ພົບບັນຊີເຈົ້າຂອງ</strong>
+                      <small>ເລືອກຈາກຄຳຂໍຮັບ ຫຼື ຄົ້ນຫານັກສຶກສາເພື່ອດຶງຂໍ້ມູນ</small>
+                    </>
+                  )}
+                </div>
+
+                {!currentReturnStudent && (
+                  <div className="return-student-picker">
+                    {activeClaimRequestsForItem(claimRequests, returnDialog).length > 0 && (
+                      <div className="return-claim-suggestions">
+                        <span>ລາຍຊື່ທີ່ຂໍຮັບຂອງ</span>
+                        <div>
+                          {activeClaimRequestsForItem(claimRequests, returnDialog).map((claim) => (
+                            <button
+                              className={
+                                Number(returnDraft.receivedByMemberId) === Number(claim.claimantId)
+                                  ? "active"
+                                  : ""
+                              }
+                              key={claim.id}
+                              onClick={() => {
+                                updateReturnStudent(claim.claimantId);
+                                setReturnReceiverSource(
+                                  claim.status === "approved"
+                                    ? "ຈາກຄຳຂໍຮັບທີ່ອະນຸມັດແລ້ວ"
+                                    : "ຈາກຄຳຂໍຮັບສິ່ງຂອງ",
+                                );
+                              }}
+                              type="button"
+                            >
+                              {claim.claimantName || claim.claimantUsername || "ນັກສຶກສາ"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <StudentSearchCombobox
+                      itemTitle={returnDialog.title}
+                      onChange={updateReturnStudent}
+                      students={students}
+                      value={returnDraft.receivedByMemberId}
+                    />
+                  </div>
+                )}
+
+                <div className="return-evidence-grid">
+                  <label className="return-evidence-field">
+                    <span>ຊື່ເຈົ້າຂອງ *</span>
+                    <input
+                      readOnly
+                      tabIndex={-1}
+                      type="text"
+                      value={returnDraft.receiverName}
+                    />
+                  </label>
+                  <label className="return-evidence-field">
+                    <span>ລະຫັດນັກສຶກສາ</span>
+                    <input
+                      readOnly
+                      tabIndex={-1}
+                      type="text"
+                      value={returnDraft.receiverStudentCode}
+                    />
+                  </label>
+                  <label className="return-evidence-field">
+                    <span>ພາກວິຊາ / ຫ້ອງຮຽນ</span>
+                    <input
+                      readOnly
+                      tabIndex={-1}
+                      type="text"
+                      value={returnDraft.receiverDepartment}
+                    />
+                  </label>
+                  <label className="return-evidence-field">
+                    <span>ເບີໂທ</span>
+                    <input
+                      readOnly
+                      tabIndex={-1}
+                      type="tel"
+                      value={returnDraft.receiverPhone}
+                    />
+                  </label>
+                </div>
+                <p className="return-owner-readonly-hint">
+                  ເຈົ້າຂອງມາຮັບເອງ — ຂໍ້ມູນຖືກດຶງຈາກບັນຊີອັດຕະໂນມັດ ແລະ ບໍ່ສາມາດແກ້ໄຂໄດ້
+                </p>
+              </>
+            )}
+
             {returnDraft.receiverType === "representative" && (
-              <div className="return-evidence-grid">
-                <label className="return-evidence-field">
-                  <span>ຊື່ຜູ້ຮັບແທນ *</span>
-                  <input
-                    onChange={(event) => updateReturnDraft("representativeName", event.target.value)}
-                    type="text"
-                    value={returnDraft.representativeName}
-                  />
-                </label>
-                <label className="return-evidence-field">
-                  <span>ເບີໂທຜູ້ຮັບແທນ *</span>
-                  <input
-                    onChange={(event) => updateReturnDraft("representativePhone", event.target.value)}
-                    type="tel"
-                    value={returnDraft.representativePhone}
-                  />
-                </label>
-                <label className="return-evidence-field">
-                  <span>ຄວາມສຳພັນກັບເຈົ້າຂອງ *</span>
-                  <input
-                    onChange={(event) => updateReturnDraft("representativeRelation", event.target.value)}
-                    type="text"
-                    value={returnDraft.representativeRelation}
-                  />
-                </label>
-                <label className="return-evidence-field">
-                  <span>ໝາຍເຫດການອະນຸຍາດ</span>
-                  <input
-                    onChange={(event) => updateReturnDraft("authorizationNote", event.target.value)}
-                    type="text"
-                    value={returnDraft.authorizationNote}
-                  />
-                </label>
-              </div>
+              <>
+                <div className="return-evidence-owner">
+                  <span>ຜູ້ຮັບແທນ</span>
+                  <strong>ກອກຂໍ້ມູນຜູ້ທີ່ມາຮັບແທນເທົ່ານັ້ນ</strong>
+                  <small>ຂໍ້ມູນເຈົ້າຂອງປະກາດຖືກເຊື່ອງໄວ້ເພື່ອບໍ່ໃຫ້ສັບສົນ</small>
+                </div>
+                <div className="return-evidence-grid">
+                  <label className="return-evidence-field">
+                    <span>ຊື່ຜູ້ຮັບແທນ *</span>
+                    <input
+                      onChange={(event) => updateReturnDraft("representativeName", event.target.value)}
+                      type="text"
+                      value={returnDraft.representativeName}
+                    />
+                  </label>
+                  <label className="return-evidence-field">
+                    <span>ເບີໂທຜູ້ຮັບແທນ *</span>
+                    <input
+                      onChange={(event) => updateReturnDraft("representativePhone", event.target.value)}
+                      type="tel"
+                      value={returnDraft.representativePhone}
+                    />
+                  </label>
+                  <label className="return-evidence-field">
+                    <span>ຄວາມສຳພັນກັບເຈົ້າຂອງ *</span>
+                    <input
+                      onChange={(event) => updateReturnDraft("representativeRelation", event.target.value)}
+                      type="text"
+                      value={returnDraft.representativeRelation}
+                    />
+                  </label>
+                  <label className="return-evidence-field">
+                    <span>ໝາຍເຫດການອະນຸຍາດ</span>
+                    <input
+                      onChange={(event) => updateReturnDraft("authorizationNote", event.target.value)}
+                      type="text"
+                      value={returnDraft.authorizationNote}
+                    />
+                  </label>
+                </div>
+              </>
             )}
 
             <ImageUploadField
@@ -793,6 +1274,61 @@ export function TeacherApprovalPage({
               <button className="reject-button" disabled={saving} type="submit">
                 <X size={17} />
                 ຢືນຢັນປະຕິເສດ
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {claimRejectDialog && (
+        <div className="reject-reason-modal" role="dialog" aria-modal="true" aria-labelledby="claim-reject-title">
+          <form
+            className="reject-reason-card"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const reason = claimRejectReason.trim();
+              if (!reason) {
+                setClaimRejectError("ກະລຸນາລະບຸເຫດຜົນກ່ອນປະຕິເສດຄຳຂໍຮັບ");
+                return;
+              }
+              await onRejectClaim?.(claimRejectDialog.id, reason);
+              setClaimRejectDialog(null);
+              setClaimRejectReason("");
+              setClaimRejectError("");
+            }}
+          >
+            <button
+              className="reject-reason-close"
+              onClick={() => setClaimRejectDialog(null)}
+              type="button"
+              aria-label="ປິດ"
+            >
+              <X size={18} />
+            </button>
+            <span className="reject-reason-eyebrow">ປະຕິເສດຄຳຂໍຮັບ</span>
+            <h3 id="claim-reject-title">{claimRejectDialog.foundTitle || "ຄຳຂໍຮັບສິ່ງຂອງ"}</h3>
+            <p>ຜູ້ຂໍຮັບ: {claimRejectDialog.claimantName || claimRejectDialog.claimantUsername || "ນັກສຶກສາ"}</p>
+            <label className="reject-reason-field">
+              <span>ເຫດຜົນການປະຕິເສດ *</span>
+              <textarea
+                autoFocus
+                maxLength={1000}
+                onChange={(event) => {
+                  setClaimRejectReason(event.target.value);
+                  setClaimRejectError("");
+                }}
+                placeholder="ເຊັ່ນ ຂໍ້ມູນບໍ່ກົງ, ບໍ່ສາມາດຢືນຢັນຕົວຕົນ..."
+                value={claimRejectReason}
+              />
+            </label>
+            {claimRejectError && <p className="reject-reason-error">{claimRejectError}</p>}
+            <div className="reject-reason-actions">
+              <button className="outline-button" onClick={() => setClaimRejectDialog(null)} type="button">
+                ຍົກເລີກ
+              </button>
+              <button className="reject-button" disabled={saving} type="submit">
+                <X size={17} />
+                ຢືນຢັນປະຕິເສດຄຳຂໍ
               </button>
             </div>
           </form>

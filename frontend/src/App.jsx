@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
 import { statusMeta } from "./data.js";
-import { buildNotifications } from "./utils/notifications.js";
 import { lostStatusLabel, normalizeText } from "./utils/ui.js";
 import { Header } from "./components/layout/Header.jsx";
 import { Footer } from "./components/layout/Footer.jsx";
@@ -25,14 +24,24 @@ import { useSession } from "./hooks/useSession.js";
 import { useFoundPosts } from "./hooks/useFoundPosts.js";
 import { useLostPosts } from "./hooks/useLostPosts.js";
 import { useMasterData } from "./hooks/useMasterData.js";
+import { useMatches } from "./hooks/useMatches.js";
+import { useNotifications } from "./hooks/useNotifications.js";
 import { useRouter } from "./hooks/useRouter.js";
-import { claimFoundPost } from "./api/posts.js";
+import { approveClaimRequest, claimFoundPost, rejectClaimRequest } from "./api/posts.js";
 
 const MATCH_THRESHOLD = 70;
 const PUBLIC_FOUND_STATUSES = new Set(["approved", "matched"]);
-const PUBLIC_LOST_STATUSES = new Set(["published", "matched"]);
+// Lost posts marked found (`matched`) stay off the public board — owner/teacher still see them elsewhere
+const PUBLIC_LOST_STATUSES = new Set(["published"]);
 const HOME_STATUS_ALL = "all";
 const APPROVAL_STATUSES = new Set(["awaiting_handover", "pending_approval"]);
+
+function canViewLostAnnouncement(lost, currentUser) {
+  if (!lost) return false;
+  if (currentUser?.role === "teacher") return true;
+  if (Number(lost.ownerId) === Number(currentUser?.id)) return true;
+  return PUBLIC_LOST_STATUSES.has(lost.status);
+}
 const REVIEW_ROLES = new Set(["teacher"]);
 
 function activeMasterNames(items) {
@@ -68,6 +77,7 @@ function App() {
     masterDataLoading,
     masterDataError,
     loadAppData,
+    dataVersion,
   } = appData;
 
   useEffect(() => {
@@ -79,9 +89,35 @@ function App() {
   const { currentUser, setCurrentUser, login, logout, register, saveProfile, uploadProfileAvatar, uploadStudentCard } =
     session;
 
+  const {
+    notifications,
+    unreadCount,
+    markRead,
+    markAllRead,
+  } = useNotifications({ currentUser, refreshKey: dataVersion });
+
+  const { matchSaving, confirmMatch, rejectMatch } = useMatches({
+    matchRows,
+    lostReports,
+    currentUser,
+    loadAppData,
+    setToast,
+  });
+
   // ── Routing ───────────────────────────────────────────────────────────────
   const canReview = currentUser ? REVIEW_ROLES.has(currentUser.role) : false;
-  const { currentPage, navigateToPage } = useRouter({ currentUser, canReview, setToast });
+  const { currentPage, navigateToPage, routeParams } = useRouter({ currentUser, canReview, setToast });
+
+  useEffect(() => {
+    if (currentPage !== "announcement-detail") return;
+    if (routeParams.found) {
+      setSelectedItemId(`found-${routeParams.found}`);
+      return;
+    }
+    if (routeParams.lost) {
+      setSelectedItemId(`lost-${routeParams.lost}`);
+    }
+  }, [currentPage, routeParams.found, routeParams.lost]);
 
   useEffect(() => {
     if (currentPage !== "matching" && matchFocus) {
@@ -184,10 +220,20 @@ function App() {
     const rows = [
       ...foundItems
         .filter((item) => PUBLIC_FOUND_STATUSES.has(item.status) && !returnedFoundPostIds.has(Number(item.id)))
-        .map((item) => ({ ...item, homeKey: `found-${item.id}`, homeType: "found", homeDate: item.foundAt })),
+        .map((item) => ({
+          ...item,
+          homeKey: `found-${item.id}`,
+          homeType: "found",
+          homeDate: item.approvedAt || item.createdAt || item.foundAt,
+        })),
       ...lostReports
         .filter((report) => PUBLIC_LOST_STATUSES.has(report.status) && !returnedLostPostIds.has(Number(report.id)))
-        .map((report) => ({ ...report, homeKey: `lost-${report.id}`, homeType: "lost", homeDate: report.lostAt })),
+        .map((report) => ({
+          ...report,
+          homeKey: `lost-${report.id}`,
+          homeType: "lost",
+          homeDate: report.updatedAt || report.createdAt || report.lostAt,
+        })),
     ];
 
     return rows
@@ -244,14 +290,6 @@ function App() {
     [foundItems, lostReports],
   );
 
-  const notifications = useMemo(
-    () =>
-      buildNotifications({
-        currentUser, foundItems, lostReports, matches: matchSummaries, returnRecords, claimRequests,
-      }),
-    [currentUser, foundItems, lostReports, matchSummaries, returnRecords, claimRequests],
-  );
-
   const approvalStats = useMemo(() => {
     return teacherApprovalItems.reduce(
       (acc, item) => {
@@ -288,13 +326,16 @@ function App() {
       }
       if (kind === "lost") {
         const lost = lostReports.find((item) => Number(item.id) === id);
-        if (lost) return { ...lost, homeKey: selectedItemId, homeType: "lost", homeDate: lost.lostAt };
+        if (lost && canViewLostAnnouncement(lost, currentUser)) {
+          return { ...lost, homeKey: selectedItemId, homeType: "lost", homeDate: lost.lostAt };
+        }
+        return null;
       }
     }
 
     if (currentPage === "announcement-detail") return homeItems[0] ?? null;
     return null;
-  }, [currentPage, foundItems, homeItems, lostReports, selectedItemId]);
+  }, [currentPage, currentUser, foundItems, homeItems, lostReports, selectedItemId]);
 
   // ── Approval helpers ───────────────────────────────────────────────────────
   function approveApprovalItem(item) {
@@ -307,6 +348,15 @@ function App() {
 
   function showAnnouncementDetail(homeKey) {
     setSelectedItemId(homeKey);
+    const [kind, id] = String(homeKey).split("-");
+    if (kind === "found" && id) {
+      navigateToPage("announcement-detail", { found: id });
+      return;
+    }
+    if (kind === "lost" && id) {
+      navigateToPage("announcement-detail", { lost: id });
+      return;
+    }
     navigateToPage("announcement-detail");
   }
 
@@ -361,6 +411,76 @@ function App() {
     return claim;
   }
 
+  async function approveClaim(claimId) {
+    try {
+      await approveClaimRequest(claimId, currentUser.id);
+      await loadAppData();
+      setToast("ອະນຸມັດຄຳຂໍຮັບແລ້ວ — ລໍຖ້ານັກສຶກສາມາຮັບຂອງ ແລ້ວບັນທຶກຄືນ");
+      return true;
+    } catch (error) {
+      setToast(error.message || "ອະນຸມັດຄຳຂໍຮັບບໍ່ສຳເລັດ");
+      return false;
+    }
+  }
+
+  async function rejectClaim(claimId, reason) {
+    try {
+      await rejectClaimRequest(claimId, currentUser.id, reason);
+      await loadAppData();
+      setToast("ປະຕິເສດຄຳຂໍຮັບແລ້ວ ແລະ ແຈ້ງເຕືອນນັກສຶກສາແລ້ວ");
+    } catch (error) {
+      setToast(error.message || "ປະຕິເສດຄຳຂໍຮັບບໍ່ສຳເລັດ");
+    }
+  }
+
+  function handleNotificationNavigate(notification) {
+    const href = String(notification?.href || "#notifications");
+    const raw = href.replace(/^#/, "");
+    const [pathPart, queryPart = ""] = raw.split("?");
+    const params = Object.fromEntries(new URLSearchParams(queryPart));
+
+    if (notification?.entityType === "claim_request") {
+      const claim =
+        claimRequests.find((item) => Number(item.id) === Number(notification.entityId)) ??
+        claimRequests.find((item) => Number(item.id) === Number(params.claim));
+      const foundId = params.found || claim?.foundPostId;
+      if (foundId) {
+        if (currentUser?.role === "teacher") {
+          navigateToPage("approval", {
+            found: foundId,
+            claim: notification.entityId || claim?.id || params.claim,
+          });
+        } else {
+          showAnnouncementDetail(`found-${foundId}`);
+        }
+        return;
+      }
+    }
+
+    if (pathPart === "approval" || pathPart.startsWith("approval")) {
+      navigateToPage("approval", params);
+      return;
+    }
+
+    if (pathPart === "matching") {
+      navigateToPage("matching", params);
+      return;
+    }
+
+    if (pathPart === "announcement-detail" && (params.found || params.lost)) {
+      const homeKey = params.found ? `found-${params.found}` : `lost-${params.lost}`;
+      showAnnouncementDetail(homeKey);
+      return;
+    }
+
+    if (pathPart === "notifications") {
+      navigateToPage("notifications");
+      return;
+    }
+
+    navigateToPage(pathPart || "notifications", params);
+  }
+
   // ── Page renderer ──────────────────────────────────────────────────────────
   function renderCurrentPage() {
     if (currentPage === "login") {
@@ -378,6 +498,18 @@ function App() {
     }
 
     if (currentPage === "announcement-detail") {
+      if (!selectedAnnouncement) {
+        return (
+          <section className="announcement-detail-page" aria-labelledby="announcement-unavailable-title">
+            <h2 id="announcement-unavailable-title">ປະກາດນີ້ບໍ່ສາມາດເບິ່ງໄດ້</h2>
+            <p>ປະກາດຂອງສູນຫາຍທີ່ຖືກໝາຍວ່າພົບຂອງແລ້ວ ຈະບໍ່ສະແດງໃຫ້ນັກສຶກສາທົ່ວໄປອີກ.</p>
+            <a className="button" href="#home">
+              ກັບໄປໜ້າຫຼັກ
+            </a>
+          </section>
+        );
+      }
+
       return (
         <AnnouncementDetailPage
           canViewMatches={Boolean(currentUser)}
@@ -426,7 +558,16 @@ function App() {
     }
 
     if (currentPage === "notifications") {
-      return <NotificationsPage currentUser={currentUser} notifications={notifications} />;
+      return (
+        <NotificationsPage
+          currentUser={currentUser}
+          notifications={notifications}
+          onMarkAllRead={markAllRead}
+          onMarkRead={markRead}
+          onNavigate={handleNotificationNavigate}
+          unreadCount={unreadCount}
+        />
+      );
     }
 
     if (currentPage === "reports") {
@@ -489,11 +630,17 @@ function App() {
         <TeacherApprovalPage
           categoryOptions={categoryFilterOptions}
           claimRequests={claimRequests}
+          focusClaimId={routeParams.claim}
+          focusFoundId={routeParams.found}
           items={teacherApprovalItems}
+          lostReports={lostReports}
+          matches={matchSummaries}
           onApprove={approveApprovalItem}
+          onApproveClaim={approveClaim}
           onMoveToApproval={moveToApproval}
           onMarkLostFound={markLostItemFound}
           onReject={rejectApprovalItem}
+          onRejectClaim={rejectClaim}
           onReturn={returnFoundItem}
           saving={appSaving || lostSaving}
           stats={approvalStats}
@@ -535,8 +682,11 @@ function App() {
         <MatchingPage
           currentUser={currentUser}
           focusedItem={matchFocus}
+          matchSaving={matchSaving}
           matches={matchSummaries}
           onClearFocus={() => setMatchFocus(null)}
+          onConfirmMatch={confirmMatch}
+          onRejectMatch={rejectMatch}
           onViewFound={(foundPostId) => showAnnouncementDetail(`found-${foundPostId}`)}
           onViewLost={(lostPostId) => showAnnouncementDetail(`lost-${lostPostId}`)}
         />
@@ -571,7 +721,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Header currentUser={currentUser} notificationCount={notifications.length} onLogout={logout} />
+      <Header currentUser={currentUser} notificationCount={unreadCount} onLogout={logout} />
       <GlobalToast onClear={() => setToast("")} toast={toast} />
       <main>{renderCurrentPage()}</main>
       <Footer currentUser={currentUser} onGuideClick={showUsageGuide} />

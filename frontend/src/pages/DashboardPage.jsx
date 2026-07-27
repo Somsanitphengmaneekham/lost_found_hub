@@ -61,7 +61,7 @@ function topCounts(items, key, limit = 5) {
 }
 
 function recentSortValue(item) {
-  const dateValue = item.foundAt || item.lostAt || item.createdAt || "";
+  const dateValue = item.createdAt || item.updatedAt || item.foundAt || item.lostAt || "";
   const time = new Date(dateValue).getTime();
   return Number.isNaN(time) ? 0 : time;
 }

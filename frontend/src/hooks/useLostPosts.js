@@ -265,8 +265,8 @@ export function useLostPosts({
       await loadAppData();
       setToast(
         result.matchCount
-          ? `ແຈ້ງເຈົ້າຂອງວ່າພົບຂອງແລ້ວ ແລະ ມີລາຍການໃກ້ຄຽງ ${result.matchCount} ລາຍການ`
-          : "ແຈ້ງເຈົ້າຂອງວ່າພົບຂອງແລ້ວ",
+          ? `ປ່ຽນເປັນພົບຂອງແລ້ວ · ເຊື່ອງຈາກໜ້າຫຼັກ ແລະ ມີລາຍການໃກ້ຄຽງ ${result.matchCount} ລາຍການ`
+          : "ປ່ຽນເປັນພົບຂອງແລ້ວ · ເຊື່ອງຈາກໜ້າຫຼັກແລ້ວ",
       );
     } catch (error) {
       setToast(error.message || "ປ່ຽນສະຖານະຂອງສູນຫາຍບໍ່ສຳເລັດ");

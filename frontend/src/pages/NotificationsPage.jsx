@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Bell, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Search } from "lucide-react";
+import { ArrowRight, Bell, CheckCheck, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Search } from "lucide-react";
 import { EmptyState } from "../components/common/FormControls.jsx";
 import { formatLaoDateTime, normalizeText } from "../utils/ui.js";
 
@@ -8,6 +8,7 @@ const NOTIFICATION_SORT_OPTIONS = [
   { value: "latest", label: "ຫຼ້າສຸດກ່ອນ" },
   { value: "priority", label: "ສຳຄັນກ່ອນ" },
   { value: "oldest", label: "ເກົ່າສຸດກ່ອນ" },
+  { value: "unread", label: "ຍັງບໍ່ອ່ານກ່ອນ" },
 ];
 
 const audienceCopy = {
@@ -23,11 +24,11 @@ const audienceCopy = {
   },
 };
 
-function notificationStats(notifications) {
+function notificationStats(notifications, unreadCount) {
   return {
     total: notifications.length,
-    urgent: notifications.filter((item) => item.priority <= 1).length,
-    workflow: notifications.filter((item) => item.href !== "#profile").length,
+    unread: unreadCount,
+    urgent: notifications.filter((item) => item.priority <= 1 && !item.isRead).length,
   };
 }
 
@@ -37,21 +38,37 @@ function notificationDateValue(item) {
 }
 
 function compareNotifications(a, b, sortMode) {
-  if (sortMode === "priority") {
-    return Number(a.priority ?? 9) - Number(b.priority ?? 9) || notificationDateValue(b) - notificationDateValue(a);
+  const byNewest = notificationDateValue(b) - notificationDateValue(a) || Number(b.id) - Number(a.id);
+
+  if (sortMode === "unread") {
+    return Number(a.isRead) - Number(b.isRead) || byNewest;
   }
 
-  if (sortMode === "oldest") return notificationDateValue(a) - notificationDateValue(b);
-  return notificationDateValue(b) - notificationDateValue(a) || Number(a.priority ?? 9) - Number(b.priority ?? 9);
+  if (sortMode === "priority") {
+    return Number(a.priority ?? 9) - Number(b.priority ?? 9) || byNewest;
+  }
+
+  if (sortMode === "oldest") {
+    return notificationDateValue(a) - notificationDateValue(b) || Number(a.id) - Number(b.id);
+  }
+
+  return byNewest;
 }
 
-export function NotificationsPage({ currentUser, notifications }) {
+export function NotificationsPage({
+  currentUser,
+  notifications,
+  onMarkAllRead,
+  onMarkRead,
+  onNavigate,
+  unreadCount = 0,
+}) {
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState("latest");
   const [page, setPage] = useState(1);
   const audience = currentUser.role === "teacher" ? "teacher" : "student";
   const copy = audienceCopy[audience];
-  const stats = notificationStats(notifications);
+  const stats = notificationStats(notifications, unreadCount);
   const query = normalizeText(search);
   const filteredNotifications = notifications.filter((notification) => {
     if (!query) return true;
@@ -78,6 +95,18 @@ export function NotificationsPage({ currentUser, notifications }) {
     }, 0);
   }
 
+  async function handleOpen(notification, event) {
+    event?.preventDefault?.();
+    if (!notification.isRead) {
+      try {
+        await onMarkRead?.(notification.id);
+      } catch {
+        // Keep navigation even if mark-read fails.
+      }
+    }
+    onNavigate?.(notification);
+  }
+
   return (
     <section className="notifications-page" id="notifications" aria-labelledby="notifications-title">
       <div className="notifications-hero">
@@ -86,12 +115,18 @@ export function NotificationsPage({ currentUser, notifications }) {
           <h2 id="notifications-title">{copy.title}</h2>
           <p>{copy.description}</p>
         </div>
+        {unreadCount > 0 && (
+          <button className="outline-button" onClick={() => onMarkAllRead?.()} type="button">
+            <CheckCheck size={16} />
+            ໝາຍວ່າອ່ານທັງໝົດ
+          </button>
+        )}
       </div>
 
       <div className="notifications-metrics">
         <NotificationMetric label="ທັງໝົດ" value={stats.total} />
-        <NotificationMetric label="ສຳຄັນ" value={stats.urgent} />
-        <NotificationMetric label="ໄປດຳເນີນການຕໍ່" value={stats.workflow} />
+        <NotificationMetric label="ຍັງບໍ່ອ່ານ" value={stats.unread} />
+        <NotificationMetric label="ສຳຄັນທີ່ຍັງບໍ່ອ່ານ" value={stats.urgent} />
       </div>
 
       <div className="notifications-toolbar">
@@ -121,7 +156,11 @@ export function NotificationsPage({ currentUser, notifications }) {
         <div className="notifications-list" id="notifications-list-start" aria-live="polite">
           {visibleNotifications.length ? (
             visibleNotifications.map((notification) => (
-              <NotificationCard key={notification.id} notification={notification} />
+              <NotificationCard
+                key={notification.id}
+                notification={notification}
+                onOpen={(event) => handleOpen(notification, event)}
+              />
             ))
           ) : (
             <EmptyState
@@ -183,11 +222,12 @@ function NotificationMetric({ label, value }) {
   );
 }
 
-function NotificationCard({ notification }) {
+function NotificationCard({ notification, onOpen }) {
   const isUrgent = notification.priority <= 1;
+  const isUnread = !notification.isRead;
 
   return (
-    <article className={`notification-card ${notification.tone}`}>
+    <article className={`notification-card ${notification.tone}${isUnread ? " unread" : " read"}`}>
       <div className="notification-icon" aria-hidden="true">
         {isUrgent ? <Bell size={20} /> : <CheckCircle2 size={20} />}
       </div>
@@ -197,6 +237,7 @@ function NotificationCard({ notification }) {
           <span className={`notification-priority ${isUrgent ? "urgent" : ""}`}>
             {isUrgent ? "ສຳຄັນ" : "ຕິດຕາມ"}
           </span>
+          {isUnread ? <span className="notification-unread-dot">ຍັງບໍ່ອ່ານ</span> : null}
         </div>
         <p>{notification.description}</p>
         <div className="notification-meta">
@@ -207,7 +248,7 @@ function NotificationCard({ notification }) {
           </span>
         </div>
       </div>
-      <a className="notification-action" href={notification.href}>
+      <a className="notification-action" href={notification.href} onClick={onOpen}>
         {notification.actionLabel}
         <ArrowRight size={16} />
       </a>

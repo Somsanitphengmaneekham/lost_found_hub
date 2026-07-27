@@ -38,6 +38,7 @@ DROP VIEW IF EXISTS v_report_found_count_by_month;
 DROP VIEW IF EXISTS v_report_lost_count_by_month;
 
 -- ── Drop tables (ທຳການລຶບກ່ອນ re-create) ──────────────────────
+DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS return_records;
 DROP TABLE IF EXISTS matches;
 DROP TABLE IF EXISTS claim_requests;
@@ -359,15 +360,43 @@ CREATE TABLE matches (
   lost_post_id  INT UNSIGNED    NOT NULL,
   found_post_id INT UNSIGNED    NOT NULL,
   match_score   DECIMAL(5,2)   NOT NULL COMMENT 'ຄະແນນການຈັບຄູ່ 0-100',
+  status        ENUM('suggested','confirmed','rejected') NOT NULL DEFAULT 'suggested',
   created_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_matches_lost_post_id (lost_post_id),
   KEY idx_matches_found_post_id (found_post_id),
+  KEY idx_matches_status (status),
   CONSTRAINT fk_matches_lost_post
     FOREIGN KEY (lost_post_id) REFERENCES lost_posts(id)
     ON UPDATE CASCADE ON DELETE CASCADE,
   CONSTRAINT fk_matches_found_post
     FOREIGN KEY (found_post_id) REFERENCES found_posts(id)
+    ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ── notifications ─────────────────────────────────────────────
+CREATE TABLE notifications (
+  id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  member_id     INT UNSIGNED NOT NULL,
+  event_type    VARCHAR(64)  NOT NULL,
+  title         VARCHAR(255) NOT NULL,
+  body          TEXT         NOT NULL,
+  meta          VARCHAR(255)     NULL,
+  href          VARCHAR(128) NOT NULL DEFAULT '#notifications',
+  action_label  VARCHAR(128)     NULL,
+  tone          VARCHAR(32)  NOT NULL DEFAULT 'slate',
+  priority      TINYINT UNSIGNED NOT NULL DEFAULT 5,
+  entity_type   VARCHAR(32)      NULL,
+  entity_id     INT UNSIGNED     NULL,
+  is_read       TINYINT(1)   NOT NULL DEFAULT 0,
+  read_at       DATETIME         NULL,
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_notifications_member_created (member_id, created_at),
+  KEY idx_notifications_member_unread (member_id, is_read, created_at),
+  KEY idx_notifications_entity (entity_type, entity_id),
+  CONSTRAINT fk_notifications_member
+    FOREIGN KEY (member_id) REFERENCES members(id)
     ON UPDATE CASCADE ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

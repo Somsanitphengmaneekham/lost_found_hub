@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, ChevronLeft, ChevronRight, Info, Link2, ListFilter, Percent, Search } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, ChevronRight, Info, Link2, ListFilter, Percent, Search, X } from "lucide-react";
 import { formatLaoDateTime, normalizeText } from "../utils/ui.js";
 import { EmptyState } from "../components/common/FormControls.jsx";
 
 const MATCH_THRESHOLD = 70;
 const MATCH_PAGE_SIZE = 8;
-const PUBLIC_LOST_STATUSES = new Set(["published", "matched"]);
+const PUBLIC_LOST_STATUSES = new Set(["published"]);
 const PUBLIC_FOUND_STATUSES = new Set(["approved", "matched"]);
 const MATCH_SORT_OPTIONS = [
   { value: "latest", label: "ຫຼ້າສຸດກ່ອນ" },
@@ -38,6 +38,12 @@ function matchesFocusedItem(match, focusedItem) {
   if (focusedItem.kind === "found") return Number(match.foundPostId) === focusedId;
 
   return Number(match.lostPostId) === focusedId || Number(match.foundPostId) === focusedId;
+}
+
+function canManageMatch(match, currentUser) {
+  if (!currentUser) return false;
+  if (currentUser.role === "teacher") return true;
+  return Number(match.lost?.ownerId) === Number(currentUser.id);
 }
 
 function canViewMatch(match, currentUser, focusedItem) {
@@ -77,7 +83,17 @@ function compareMatches(a, b, sortMode) {
   return matchDateValue(b) - matchDateValue(a) || Number(b.matchScore || 0) - Number(a.matchScore || 0);
 }
 
-export function MatchingPage({ currentUser, focusedItem, matches, onClearFocus, onViewFound, onViewLost }) {
+export function MatchingPage({
+  currentUser,
+  focusedItem,
+  matches,
+  matchSaving = false,
+  onClearFocus,
+  onConfirmMatch,
+  onRejectMatch,
+  onViewFound,
+  onViewLost,
+}) {
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState("latest");
   const [page, setPage] = useState(1);
@@ -195,7 +211,9 @@ export function MatchingPage({ currentUser, focusedItem, matches, onClearFocus, 
 
                 <div className="match-body">
                   <div className="match-title-row">
-                    <span className="status-chip blue">ລາຍການແນະນຳ</span>
+                    <span className={`status-chip ${match.status === "confirmed" ? "green" : "blue"}`}>
+                      {match.status === "confirmed" ? "ຢືນຢັນແລ້ວ" : "ລາຍການແນະນຳ"}
+                    </span>
                     <small>{formatLaoDateTime(match.createdAt)}</small>
                   </div>
 
@@ -232,6 +250,28 @@ export function MatchingPage({ currentUser, focusedItem, matches, onClearFocus, 
                       {target.label}
                       <ArrowRight size={16} />
                     </button>
+                    {canManageMatch(match, currentUser) && match.status !== "confirmed" && (
+                      <>
+                        <button
+                          className="approve-button"
+                          disabled={matchSaving}
+                          onClick={() => onConfirmMatch?.(match.id)}
+                          type="button"
+                        >
+                          <Check size={16} />
+                          ຢືນຢັນ match
+                        </button>
+                        <button
+                          className="reject-button"
+                          disabled={matchSaving}
+                          onClick={() => onRejectMatch?.(match.id)}
+                          type="button"
+                        >
+                          <X size={16} />
+                          ປະຕິເສດ
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </article>

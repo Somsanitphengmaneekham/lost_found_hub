@@ -131,7 +131,7 @@ export function calculateMatchScore(lost, found) {
 
 async function saveRecommendation(pool, match) {
   const [existingRows] = await pool.execute(
-    `SELECT id
+    `SELECT id, COALESCE(status, 'suggested') AS status
      FROM matches
      WHERE lost_post_id = ?
        AND found_post_id = ?
@@ -143,6 +143,15 @@ async function saveRecommendation(pool, match) {
   const existing = existingRows[0];
 
   if (existing) {
+    if (existing.status === "rejected") {
+      return {
+        ...match,
+        matchId: existing.id,
+        status: "rejected",
+        saved: false,
+      };
+    }
+
     await pool.execute(
       `UPDATE matches
        SET match_score = ?
@@ -153,14 +162,14 @@ async function saveRecommendation(pool, match) {
     return {
       ...match,
       matchId: existing.id,
-      status: "suggested",
+      status: existing.status,
       saved: true,
     };
   }
 
   const [result] = await pool.execute(
-    `INSERT INTO matches (lost_post_id, found_post_id, match_score)
-     VALUES (?, ?, ?)`,
+    `INSERT INTO matches (lost_post_id, found_post_id, match_score, status)
+     VALUES (?, ?, ?, 'suggested')`,
     [match.lostPostId, match.foundPostId, match.score],
   );
 
@@ -190,7 +199,10 @@ export async function findCandidateMatches(pool, lostPostId, options = {}) {
   if (!lost) return [];
 
   if (!ACTIVE_LOST_STATUSES.has(lost.status)) {
-    await pool.execute(`DELETE FROM matches WHERE lost_post_id = ?`, [lost.id]);
+    await pool.execute(
+      `DELETE FROM matches WHERE lost_post_id = ? AND COALESCE(status, 'suggested') = 'suggested'`,
+      [lost.id],
+    );
     return [];
   }
 
@@ -250,8 +262,11 @@ export async function findCandidateMatches(pool, lostPostId, options = {}) {
     .filter((match) => match.matched)
     .sort((a, b) => b.score - a.score);
 
-  // Recommendations are derived data. Rebuild them so edited posts never show stale scores.
-  await pool.execute(`DELETE FROM matches WHERE lost_post_id = ?`, [lost.id]);
+  // Recommendations are derived data. Rebuild suggested rows only; keep confirmed/rejected.
+  await pool.execute(
+    `DELETE FROM matches WHERE lost_post_id = ? AND COALESCE(status, 'suggested') = 'suggested'`,
+    [lost.id],
+  );
 
   const savedMatches = [];
 

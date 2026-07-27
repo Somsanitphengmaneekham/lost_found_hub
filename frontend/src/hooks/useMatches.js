@@ -7,7 +7,7 @@ export function useMatches({ matchRows, lostReports, currentUser, loadAppData, s
   async function confirmMatch(id) {
     setMatchSaving(true);
     try {
-      await updateMatchStatus(id, "confirmed");
+      await updateMatchStatus(id, "confirmed", currentUser.id);
       await loadAppData();
       setToast("ຢືນຢັນ match ແລ້ວ ສະຖານະຂອງສູນຫາຍ ແລະ ຂອງທີ່ພົບຖືກປ່ຽນເປັນຈັບຄູ່ແລ້ວ");
     } catch (error) {
@@ -20,7 +20,7 @@ export function useMatches({ matchRows, lostReports, currentUser, loadAppData, s
   async function rejectMatch(id) {
     setMatchSaving(true);
     try {
-      await updateMatchStatus(id, "rejected");
+      await updateMatchStatus(id, "rejected", currentUser.id);
       await loadAppData();
       setToast("ປະຕິເສດ match ແລ້ວ ລາຍການນີ້ຈະບໍ່ຖືກນັບເປັນລາຍການທີ່ກົງກັນ");
     } catch (error) {

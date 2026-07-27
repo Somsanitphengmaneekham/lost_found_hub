@@ -1392,20 +1392,37 @@ main {
 }
 
 .claim-request-panel,
+.claim-request-form,
 .claim-request-success {
   margin-top: 14px;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: 12px;
   border: 1px solid #bfe2dc;
 }
 
-.claim-request-panel {
+.claim-request-panel,
+.claim-request-form {
   display: grid;
   gap: 14px;
-  background: #fbfefe;
+  background: linear-gradient(180deg, #fff9f1 0%, #ffffff 48%);
+  border-color: #e2c9a4;
+  box-shadow: 0 10px 28px rgba(92, 58, 18, 0.08);
+}
+
+.claim-request-form-head {
+  display: grid;
+  gap: 6px;
+}
+
+.claim-request-form-eyebrow {
+  color: #9a5b16;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
 }
 
 .claim-request-panel strong,
+.claim-request-form strong,
 .claim-request-success strong {
   display: block;
   color: #073838;
@@ -1414,6 +1431,7 @@ main {
 }
 
 .claim-request-panel p,
+.claim-request-form p,
 .claim-request-success span {
   display: block;
   margin-top: 4px;
@@ -1421,6 +1439,19 @@ main {
   line-height: 1.65;
 }
 
+.claim-request-steps {
+  margin: 0;
+  padding: 12px 12px 12px 30px;
+  color: #5a4630;
+  background: #fff4e5;
+  border: 1px solid #edd4ad;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.7;
+}
+
+.claim-request-field,
 .claim-request-panel label {
   display: grid;
   gap: 8px;
@@ -1428,20 +1459,46 @@ main {
   font-weight: 900;
 }
 
+.claim-request-field span {
+  color: #6a5335;
+  font-size: 12px;
+}
+
+.claim-request-field textarea,
 .claim-request-panel textarea {
   min-height: 96px;
   resize: vertical;
   padding: 12px;
   color: #073838;
   font: inherit;
-  border: 1px solid #bfd0d6;
+  border: 1px solid #dfc7a5;
   border-radius: 8px;
   outline: none;
+  background: #fff;
 }
 
+.claim-request-field textarea:focus,
 .claim-request-panel textarea:focus {
-  border-color: var(--teal);
-  box-shadow: 0 0 0 3px rgba(11, 118, 109, 0.12);
+  border-color: #c9852f;
+  box-shadow: 0 0 0 3px rgba(201, 133, 47, 0.16);
+}
+
+.claim-request-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #e2c9a4;
+  border-radius: 10px;
+  color: #3f3426;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.claim-request-confirm input {
+  margin-top: 2px;
 }
 
 .claim-request-actions {
@@ -1449,6 +1506,12 @@ main {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.claim-submit-button,
+.claim-open-button {
+  background: #b56d1d !important;
+  border-color: #b56d1d !important;
 }
 
 .claim-request-error {
@@ -1467,6 +1530,126 @@ main {
   gap: 10px;
   color: var(--teal);
   background: #eefbf7;
+}
+
+.approval-claim-queue {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  background: linear-gradient(180deg, #fff8ee 0%, #fffdf9 100%);
+  border: 1px solid #e8d0ad;
+  border-radius: 12px;
+}
+
+.approval-claim-queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.approval-claim-queue-head strong {
+  color: #8a5414;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.approval-claim-queue-head span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  color: #8a5414;
+  background: #f6e7d0;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.approval-claim-queue-row {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #ead7bb;
+  border-radius: 12px;
+}
+
+.approval-claim-person {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.approval-claim-name {
+  color: #1f2d2a;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.approval-claim-message {
+  color: #6b736f;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.approval-claim-status {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 4px;
+  padding: 3px 9px;
+  color: #9a5b16;
+  background: #fff3e0;
+  border: 1px solid #efd4a8;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.claim-decision-actions-stack {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.teacher-approval-card.claim-queue-card {
+  grid-template-columns: 126px minmax(0, 1fr);
+  border-color: #e0c193;
+  box-shadow: 0 8px 22px rgba(140, 90, 20, 0.08);
+}
+
+.teacher-approval-card.pickup-queue-card {
+  border-color: #9dd8cf;
+  box-shadow: 0 8px 22px rgba(11, 118, 109, 0.1);
+}
+
+.approval-pickup-queue {
+  background: linear-gradient(180deg, #eefbf7 0%, #f7fffd 100%);
+  border-color: #9dd8cf;
+}
+
+.approval-pickup-queue .approval-claim-queue-head strong {
+  color: #0b5f58;
+}
+
+.approval-pickup-queue .approval-claim-queue-head span {
+  color: #0b5f58;
+  background: #d8f3ec;
+}
+
+.approval-claim-status-ready {
+  color: #0b5f58;
+  background: #e7f7f3;
+  border-color: #9dd8cf;
+}
+
+@media (min-width: 860px) {
+  .approval-claim-queue-row {
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 220px);
+    align-items: start;
+  }
 }
 
 .home-stats {
@@ -2823,7 +3006,7 @@ main {
 
 .approval-queue-tabs {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -2831,17 +3014,24 @@ main {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   min-height: 46px;
-  padding: 0 12px;
+  min-width: 0;
+  padding: 0 10px;
   color: #315253;
   background: #f7fbfb;
   border: 1px solid #d1dedf;
   border-radius: 7px;
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 900;
+}
+
+.approval-queue-tabs button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .approval-queue-tabs button:hover,
@@ -2849,6 +3039,28 @@ main {
   color: var(--teal-dark);
   background: var(--teal-soft);
   border-color: #9dd8cf;
+}
+
+.approval-queue-tabs button[data-tab="claims"]:hover,
+.approval-queue-tabs button[data-tab="claims"].active {
+  color: #8a5414;
+  background: #fff4e5;
+  border-color: #e0c193;
+}
+
+.approval-queue-tabs button[data-tab="claims"].active strong {
+  background: #9a5b16;
+}
+
+.approval-queue-tabs button[data-tab="awaiting_pickup"]:hover,
+.approval-queue-tabs button[data-tab="awaiting_pickup"].active {
+  color: #0b5f58;
+  background: #e7f7f3;
+  border-color: #9dd8cf;
+}
+
+.approval-queue-tabs button[data-tab="awaiting_pickup"].active strong {
+  background: #0b766d;
 }
 
 .approval-queue-tabs strong {
@@ -2914,6 +3126,11 @@ main {
   border: 1px solid #d1dedf;
   border-radius: 8px;
   box-shadow: 0 10px 24px rgba(15, 40, 40, 0.06);
+}
+
+.teacher-approval-card.focused {
+  border-color: #0b766d;
+  box-shadow: 0 0 0 3px rgba(11, 118, 109, 0.18);
 }
 
 .teacher-approval-card.wide {
@@ -3077,6 +3294,22 @@ main {
 .return-status-controls > .return-claim-suggestions,
 .return-evidence-owner-legacy {
   display: none;
+}
+
+.return-owner-readonly-hint {
+  margin: 0;
+  color: #5d736f;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.return-evidence-field input:read-only,
+.return-evidence-field textarea:read-only {
+  color: #35514c;
+  background: #eef4f3;
+  border-color: #d5e2df;
+  cursor: default;
 }
 
 .return-student-picker {
@@ -3545,6 +3778,56 @@ main {
   background: #f2f8f8;
   border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+.return-evidence-owner.is-filled {
+  background: #e8f6ef;
+  border-color: #b7deca;
+}
+
+.return-receiver-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.return-receiver-avatar {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid #c9ddd4;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.return-receiver-preview strong {
+  display: block;
+  color: #083333;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.return-receiver-preview small,
+.return-receiver-preview em {
+  display: block;
+  margin-top: 2px;
+  color: #526767;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.return-receiver-preview em {
+  color: #0b766d;
+  font-weight: 800;
+}
+
+.return-claim-suggestions button.active {
+  background: #0b766d;
+  color: #fff;
+  border-color: #0b766d;
 }
 
 .return-evidence-owner span,
@@ -4221,6 +4504,11 @@ main {
 .status-chip.amber {
   color: #8a5f00;
   background: var(--amber-soft);
+}
+
+.status-chip.teal {
+  color: #0b5f58;
+  background: #e7f7f3;
 }
 
 .status-chip.red {
@@ -5123,6 +5411,72 @@ main {
   border: 1px solid var(--line);
   border-left: 5px solid var(--slate);
   border-radius: 8px;
+}
+
+.notification-card.unread {
+  background: #f7fbfa;
+}
+
+.notification-card.read {
+  opacity: 0.92;
+}
+
+.notification-unread-dot {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  color: #0b766d;
+  background: #e7f6f1;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.claim-decision-row {
+  display: grid;
+  gap: 8px;
+}
+
+.claim-decision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.claim-decision-actions.claim-decision-actions-stack {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.claim-decision-actions.claim-decision-actions-stack .approve-button,
+.claim-decision-actions.claim-decision-actions-stack .reject-button,
+.claim-decision-actions.claim-decision-actions-stack .return-button {
+  width: 100%;
+  justify-content: center;
+  min-height: 40px;
+}
+
+.claim-decision-actions.claim-decision-actions-stack .return-button {
+  color: #ffffff;
+  background: #0f5c57;
+  border: 1px solid #0f5c57;
+}
+
+.claim-decision-actions.claim-decision-actions-stack .return-button:hover {
+  background: #0a4a46;
+  border-color: #0a4a46;
+}
+
+.notifications-hero {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
 }
 
 .notification-card.amber {
@@ -7581,7 +7935,11 @@ body {
 
 @media (max-width: 1180px) {
   .approval-queue-tabs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .teacher-approval-card.claim-queue-card {
+    grid-template-columns: 110px minmax(0, 1fr);
   }
 
   .teacher-approval-layout {
@@ -7610,6 +7968,10 @@ body {
   }
 
   .teacher-approval-card {
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-approval-card.claim-queue-card {
     grid-template-columns: 1fr;
   }
 

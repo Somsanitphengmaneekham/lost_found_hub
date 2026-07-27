@@ -20,13 +20,13 @@
 | ประกาศของที่พบเจอ | `found_posts`, `item_images`, `handover_records` |
 | ขอรับคืน/คืนของ | `claim_requests`, `return_records` |
 | ระบบแนะนำรายการที่อาจตรงกัน | `matches` |
+| แจ้งเตือนในแอป | `notifications` |
 
 ## ตารางที่ตัดออก
 
 | ตาราง | เหตุผล |
 | --- | --- |
 | `approval_logs` | ยังไม่จำเป็น เพราะสถานะล่าสุดเก็บใน `found_posts.status`, `approved_by`, `approved_at`, `reject_reason` ได้แล้ว |
-| `notifications` | เวอร์ชันแรกใช้แจ้งเตือนในหน้าเว็บหรือ toast ก่อนได้ ยังไม่ต้องเก็บลงฐานข้อมูล |
 | `audit_logs` | เป็นประวัติการแก้ไขเชิงระบบ เหมาะกับเวอร์ชันใหญ่กว่า แต่ไม่จำเป็นต่อ flow หลักตอนนี้ |
 | `claim_requests.returned_at` | ซ้ำกับ `return_records.returned_at` จึงตัดออก |
 

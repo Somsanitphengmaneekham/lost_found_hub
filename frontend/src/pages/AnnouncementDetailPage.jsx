@@ -54,6 +54,7 @@ export function AnnouncementDetailPage({
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [claimPanelOpen, setClaimPanelOpen] = useState(false);
   const [claimMessage, setClaimMessage] = useState("");
+  const [claimConfirmIdentity, setClaimConfirmIdentity] = useState(false);
   const [claimError, setClaimError] = useState("");
   const [claimSaving, setClaimSaving] = useState(false);
   const [claimSubmitted, setClaimSubmitted] = useState(false);
@@ -64,6 +65,7 @@ export function AnnouncementDetailPage({
     setActiveImageIndex(0);
     setClaimPanelOpen(false);
     setClaimMessage("");
+    setClaimConfirmIdentity(false);
     setClaimError("");
     setClaimSubmitted(false);
   }, [item?.homeKey]);
@@ -105,6 +107,10 @@ export function AnnouncementDetailPage({
   async function handleClaimSubmit(event) {
     event.preventDefault();
     if (!canClaimFound) return;
+    if (!claimConfirmIdentity) {
+      setClaimError("ກະລຸນາຢືນຢັນວ່າລາຍການນີ້ເປັນຂອງທ່ານກ່ອນສົ່ງຄຳຂໍຮັບ");
+      return;
+    }
     setClaimError("");
     setClaimSaving(true);
 
@@ -114,6 +120,7 @@ export function AnnouncementDetailPage({
         setClaimPanelOpen(false);
         setClaimSubmitted(true);
         setClaimMessage("");
+        setClaimConfirmIdentity(false);
       }
     } catch (error) {
       setClaimError(error.message || "ບໍ່ສາມາດສົ່ງຄຳຂໍຮັບໄດ້");
@@ -124,6 +131,7 @@ export function AnnouncementDetailPage({
 
   function openClaimPanel() {
     setClaimPanelOpen(true);
+    setClaimConfirmIdentity(false);
     setClaimError("");
     window.setTimeout(() => {
       claimPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -245,12 +253,12 @@ export function AnnouncementDetailPage({
             )}
             {canClaimFound && (
               <button
-                className="button button-primary"
+                className="button button-primary claim-open-button"
                 onClick={openClaimPanel}
                 type="button"
               >
-                <UserRound size={18} />
-                ຂໍຮັບສິ່ງຂອງນີ້
+                <ClipboardCheck size={18} />
+                ເປີດຟອມຂໍຮັບສິ່ງຂອງ
               </button>
             )}
             {!isLost && currentUser && !canClaimFound && !hasActiveClaim && !claimSubmitted && (
@@ -275,28 +283,53 @@ export function AnnouncementDetailPage({
           )}
 
           {!isLost && claimPanelOpen && canClaimFound && (
-            <form className="claim-request-panel" onSubmit={handleClaimSubmit} ref={claimPanelRef}>
-              <div>
-                <strong>ຢືນຢັນການຂໍຮັບສິ່ງຂອງ</strong>
-                <p>ລະບົບຈະແຈ້ງອາຈານວ່າທ່ານຄິດວ່າລາຍການນີ້ເປັນຂອງທ່ານ. ການຮັບຂອງຈິງຕ້ອງຢືນຢັນທີ່ຫ້ອງຄຸ້ມຄອງ.</p>
-              </div>
-              <label>
-                <span>ຂໍ້ຄວາມເພີ່ມເຕີມ</span>
+            <form className="claim-request-form" onSubmit={handleClaimSubmit} ref={claimPanelRef}>
+              <header className="claim-request-form-head">
+                <span className="claim-request-form-eyebrow">ຟອມຂໍຮັບ · ປະກາດຂອງທີ່ພົບ</span>
+                <strong>ຂໍຮັບສິ່ງຂອງ: {item.title}</strong>
+                <p>
+                  ຟອມນີ້ໃຊ້ສະເພາະການຂໍຮັບຂອງທີ່ພົບ — ບໍ່ແມ່ນການແຈ້ງພົບ ຫຼື ແຈ້ງສູນຫາຍ.
+                  ອາຈານຈະກວດຕົວຕົນຂອງທ່ານທີ່ຫ້ອງຄຸ້ມຄອງກ່ອນສົ່ງຄືນ.
+                </p>
+              </header>
+
+              <ol className="claim-request-steps">
+                <li>ກວດລາຍລະອຽດປະກາດໃຫ້ກົງກັບຂອງຂອງທ່ານ</li>
+                <li>ສົ່ງຄຳຂໍຮັບຜ່ານຟອມນີ້</li>
+                <li>ນຳບັດນັກສຶກສາໄປຢືນຢັນທີ່ຫ້ອງຄຸ້ມຄອງ</li>
+              </ol>
+
+              <label className="claim-request-field">
+                <span>ຈຸດສັງເກດ / ຂໍ້ຄວາມເພີ່ມເຕີມ</span>
                 <textarea
                   maxLength={1000}
                   onChange={(event) => setClaimMessage(event.target.value)}
-                  placeholder="ເຊັ່ນ ຂອງນີ້ມີຈຸດສັງເກດຫຍັງ ຫຼື ຈະໄປຫ້ອງຄຸ້ມຄອງເວລາໃດ..."
+                  placeholder="ເຊັ່ນ ມີຮອຍສະເພາະ, ສີເຄສ, ຫຼື ຈະໄປຫ້ອງຄຸ້ມຄອງເວລາໃດ..."
                   value={claimMessage}
                 />
               </label>
+
+              <label className="claim-request-confirm">
+                <input
+                  checked={claimConfirmIdentity}
+                  onChange={(event) => setClaimConfirmIdentity(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>ຂ້ອຍຢືນຢັນວ່າລາຍການນີ້ເປັນຂອງຂ້ອຍ ແລະ ຈະນຳບັດນັກສຶກສາໄປຢືນຢັນ</span>
+              </label>
+
               {claimError && <p className="claim-request-error">{claimError}</p>}
               <div className="claim-request-actions">
                 <button className="outline-button" onClick={() => setClaimPanelOpen(false)} type="button">
                   ຍົກເລີກ
                 </button>
-                <button className="button button-primary" disabled={claimSaving} type="submit">
-                  <UserRound size={18} />
-                  {claimSaving ? "ກຳລັງສົ່ງ..." : "ສົ່ງຄຳຂໍຮັບ"}
+                <button
+                  className="button button-primary claim-submit-button"
+                  disabled={claimSaving || !claimConfirmIdentity}
+                  type="submit"
+                >
+                  <ClipboardCheck size={18} />
+                  {claimSaving ? "ກຳລັງສົ່ງ..." : "ສົ່ງຄຳຂໍຮັບສິ່ງຂອງ"}
                 </button>
               </div>
             </form>

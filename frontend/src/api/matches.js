@@ -1,11 +1,11 @@
 import { shouldUseLocalFallback, request } from "./http.js";
 import { localReturnMatchedItem, localUpdateMatchStatus } from "./localStore.js";
 
-export async function updateMatchStatus(id, status) {
+export async function updateMatchStatus(id, status, actorId) {
   try {
     return await request(`/api/matches/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, actorId }),
     });
   } catch (error) {
     if (shouldUseLocalFallback(error)) return localUpdateMatchStatus(id, status);

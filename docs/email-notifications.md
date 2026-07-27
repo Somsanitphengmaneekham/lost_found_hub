@@ -1,15 +1,35 @@
 # Email notifications
 
 The system uses the same Gmail SMTP configuration as password reset OTP.
+In-app notifications are written to the `notifications` table together with each email event (read/unread).
 
-## Events
+## Events (designed cases)
 
-- A new lost post emails every active teacher with a valid email address. The email includes the post title, reporter name, location, pending status, and a direct approval link.
-- A new found post emails every active teacher with a valid email address. The email includes the post title, reporter name, location, pending status, and a direct approval link.
-- Approving a lost/found post emails the student who created it.
-- Rejecting a lost/found post emails the student who created it.
-- Password reset OTP emails include a direct link back to the forgot-password page.
-- In-app notifications continue to appear on the Notifications page.
+### Student
+
+| Case (wireframe) | Trigger | In-app + email |
+| --- | --- | --- |
+| ລໍຖ້າອາຈານກວດສອບ | Lost/found post submitted | Author receipt (`notifyAuthorOfSubmissionPending`) |
+| ປະກາດຖືກອະນຸມັດ / ປະຕິເສດ | Approve/reject lost or found | Author (`notifyPostAuthorOfDecision`) |
+| ລາຍການອາດກົງກັນ | Suggested matches after approval | Lost owners (`notifyLostOwnersOfFoundMatches`) |
+| ລໍຖ້າອາຈານກວດສອບ (claim) | Claim submitted | Claimant (`notifyTeachersOfClaimRequest`) |
+| ຢືນຢັນຕົວຕົນແລ້ວ | Claim approved | Claimant (`notifyClaimantOfDecision`) |
+| ສົ່ງຄືນສຳເລັດ | Return recorded (found-post or match path) | Claimant + finder (`notifyClaimantOfReturn`) |
+| Match confirmed / rejected | Match status change | Owner + finder |
+| Mark lost as found | Teacher mark-found | Lost owner |
+
+### Teacher
+
+| Case (wireframe) | Trigger | In-app + email |
+| --- | --- | --- |
+| ມີປະກາດໃໝ່ລໍຖ້າອະນຸມັດ | New lost/found (+ move-to-approval) | Teachers (`notifyTeachersOfPostSubmission`) |
+| ບັດນັກສຶກສາລໍຖ້າກວດສອບ | Claim submitted (identity check) | Teachers (`notifyTeachersOfClaimRequest`) |
+| ຕ້ອງບັນທຶກການສົ່ງຄືນ | Claim approved or match confirmed | Teachers (`notifyTeachersOfReturnNeeded`) |
+
+### Other
+
+- Password reset OTP emails include a direct link back to the forgot-password page (auth mailer, not the notifications feed).
+- Approved claim emails include pickup location and service hours (`PICKUP_LOCATION`, `PICKUP_HOURS`).
 
 ## Environment
 
@@ -21,6 +41,8 @@ SMTP_PASS=your-google-app-password
 SMTP_FROM=your-email@gmail.com
 NOTIFICATION_EMAIL_ENABLED=true
 APP_PUBLIC_URL=http://127.0.0.1:5173
+PICKUP_LOCATION=ຫ້ອງຄຸ້ມຄອງ
+PICKUP_HOURS=ຈັນ–ສຸກ 08:00–16:00
 ```
 
 Set `APP_PUBLIC_URL` to the deployed website URL before production deployment.
