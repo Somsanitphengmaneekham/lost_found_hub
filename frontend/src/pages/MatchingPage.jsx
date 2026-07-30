@@ -259,7 +259,7 @@ export function MatchingPage({
                           type="button"
                         >
                           <Check size={16} />
-                          ຢືນຢັນ match
+                          ຢືນຢັນລາຍການໃກ້ຄຽງ
                         </button>
                         <button
                           className="reject-button"
@@ -282,9 +282,9 @@ export function MatchingPage({
         )}
       </div>
       {showPagination && (
-        <div className="pagination-controls matching-pagination" aria-label="Matching pagination">
+        <div className="pagination-controls matching-pagination" aria-label="ໜ້າລາຍການໃກ້ຄຽງ">
           <button
-            aria-label="Previous matching page"
+            aria-label="ໜ້າກ່ອນຂອງລາຍການໃກ້ຄຽງ"
             className="pagination-button"
             disabled={currentPage === 1}
             onClick={() => goToPage(currentPage - 1)}
@@ -297,7 +297,7 @@ export function MatchingPage({
             ໜ້າ {currentPage.toLocaleString("lo-LA")} / {totalPages.toLocaleString("lo-LA")}
           </span>
           <button
-            aria-label="Next matching page"
+            aria-label="ໜ້າຕໍ່ໄປຂອງລາຍການໃກ້ຄຽງ"
             className="pagination-button primary"
             disabled={currentPage === totalPages}
             onClick={() => goToPage(currentPage + 1)}

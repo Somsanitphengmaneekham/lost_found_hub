@@ -28,8 +28,8 @@ const APPROVAL_SORT_OPTIONS = [
 const APPROVAL_FILTER_OPTIONS = [
   { value: "all", label: "ທັງໝົດ" },
   { value: "needs_review", label: "ຕ້ອງກວດ" },
-  { value: "claims", label: "ຄຳຂໍຮັບ" },
-  { value: "awaiting_pickup", label: "ລໍຖ້າມາຮັບ" },
+  { value: "claims", label: "ກວດຜູ້ຂໍຮັບ" },
+  { value: "awaiting_pickup", label: "ລໍຖ້າສົ່ງຄືນ" },
   { value: "approved", label: "ອະນຸມັດແລ້ວ" },
   { value: "returned", label: "ສົ່ງຄືນແລ້ວ" },
   { value: "rejected", label: "ປະຕິເສດ" },
@@ -278,7 +278,7 @@ export function TeacherApprovalPage({
       if (student) {
         return {
           student,
-          source: claim.status === "approved" ? "ຈາກຄຳຂໍຮັບທີ່ອະນຸມັດແລ້ວ" : "ຈາກຄຳຂໍຮັບສິ່ງຂອງ",
+          source: claim.status === "approved" ? "ຈາກຜູ້ຂໍຮັບທີ່ກວດແລ້ວ" : "ຈາກຜູ້ຂໍຮັບສິ່ງຂອງ",
         };
       }
     }
@@ -301,7 +301,7 @@ export function TeacherApprovalPage({
       if (student) {
         return {
           student,
-          source: claim.status === "approved" ? "ຈາກຄຳຂໍຮັບທີ່ອະນຸມັດແລ້ວ" : "ຈາກຄຳຂໍຮັບສິ່ງຂອງ",
+          source: claim.status === "approved" ? "ຈາກຜູ້ຂໍຮັບທີ່ກວດແລ້ວ" : "ຈາກຜູ້ຂໍຮັບສິ່ງຂອງ",
           claim,
         };
       }
@@ -624,8 +624,8 @@ export function TeacherApprovalPage({
           <select onChange={(event) => setApprovalStatus(event.target.value)} value={approvalStatus}>
             <option value="all">ລາຍການທັງໝົດ</option>
             <option value="needs_review">ລໍຖ້າກວດສອບທັງໝົດ</option>
-            <option value="claims">ຄຳຂໍຮັບ (ຂອງທີ່ພົບ)</option>
-            <option value="awaiting_pickup">ລໍຖ້າມາຮັບ (ອະນຸມັດແລ້ວ)</option>
+            <option value="claims">ກວດຜູ້ຂໍຮັບ</option>
+            <option value="awaiting_pickup">ລໍຖ້າບັນທຶກສົ່ງຄືນ</option>
             <option value="pending_approval">ລໍຖ້າອະນຸມັດ</option>
             <option value="awaiting_handover">ລໍຖ້າຮັບສິ່ງຂອງ</option>
             <option value="approved">ອະນຸມັດແລ້ວ</option>
@@ -664,16 +664,16 @@ export function TeacherApprovalPage({
           <div>
             <strong>
               {approvalStatus === "claims"
-                ? "ຄຳຂໍຮັບສິ່ງຂອງ (ປະກາດຂອງທີ່ພົບ)"
+                ? "ກວດຜູ້ຂໍຮັບສິ່ງຂອງ"
                 : approvalStatus === "awaiting_pickup"
-                  ? "ລໍຖ້ານັກສຶກສາມາຮັບຂອງ"
+                  ? "ລໍຖ້າບັນທຶກການສົ່ງຄືນ"
                   : "ລາຍການຕາມໂຕກອງ"}
             </strong>
             <span>
               {approvalStatus === "claims"
-                ? "ສະເພາະນັກສຶກສາຂໍຮັບລາຍການທີ່ພົບ — ກວດຕົວຕົນກ່ອນອະນຸມັດ ຫຼື ປະຕິເສດ"
+                ? "ກວດຄຳອະທິບາຍ ແລະ ກວດຕົວຕົນທີ່ຫ້ອງຄຸ້ມຄອງ. ຖ້າຂໍ້ມູນບໍ່ສົມເຫດສົມຜົນ ໃຫ້ປະຕິເສດພ້ອມເຫດຜົນ"
                 : approvalStatus === "awaiting_pickup"
-                  ? "ອະນຸມັດຄຳຂໍແລ້ວ — ເມື່ອນັກສຶກສາມາຮັບຂອງໃຫ້ບັນທຶກຄືນຂອງ"
+                  ? "ກວດຕົວຕົນແລ້ວ — ເມື່ອນັກສຶກສາມາຮັບຂອງ ໃຫ້ຖ່າຍຮູບຜູ້ຮັບກັບສິ່ງຂອງ ແລ້ວບັນທຶກສົ່ງຄືນ"
                   : `ສະແດງ ${firstVisibleNumber.toLocaleString("lo-LA")}-${lastVisibleNumber.toLocaleString("lo-LA")} ຈາກ ${filteredItems.length.toLocaleString("lo-LA")} ລາຍການ`}
             </span>
           </div>
@@ -697,12 +697,12 @@ export function TeacherApprovalPage({
                     <span className="status-chip slate">{kindLabel(item)}</span>
                     {pendingClaimRequestsForItem(claimRequests, item).length > 0 && (
                       <span className="status-chip amber">
-                        ຄຳຂໍຮັບ {pendingClaimRequestsForItem(claimRequests, item).length.toLocaleString("lo-LA")}
+                        ຜູ້ຂໍຮັບ {pendingClaimRequestsForItem(claimRequests, item).length.toLocaleString("lo-LA")}
                       </span>
                     )}
                     {approvedClaimRequestsForItem(claimRequests, item).length > 0 && (
                       <span className="status-chip teal">
-                        ລໍຖ້າມາຮັບ {approvedClaimRequestsForItem(claimRequests, item).length.toLocaleString("lo-LA")}
+                        ລໍຖ້າສົ່ງຄືນ {approvedClaimRequestsForItem(claimRequests, item).length.toLocaleString("lo-LA")}
                       </span>
                     )}
                     <small>{item.date} · {item.time}</small>
@@ -728,9 +728,9 @@ export function TeacherApprovalPage({
                   {approvalStatus === "claims" && pendingClaimRequestsForItem(claimRequests, item).length > 0 && (
                     <div className="approval-claim-queue">
                       <div className="approval-claim-queue-head">
-                        <strong>ຄຳຂໍຮັບລໍຖ້າກວດສອບ</strong>
+                        <strong>ຜູ້ຂໍຮັບລໍຖ້າກວດຕົວຕົນ</strong>
                         <span>
-                          {pendingClaimRequestsForItem(claimRequests, item).length.toLocaleString("lo-LA")} ຄຳຂໍ
+                          {pendingClaimRequestsForItem(claimRequests, item).length.toLocaleString("lo-LA")} ຄົນ
                         </span>
                       </div>
                       {pendingClaimRequestsForItem(claimRequests, item).map((claim) => (
@@ -752,7 +752,7 @@ export function TeacherApprovalPage({
                               type="button"
                             >
                               <Check size={15} />
-                              ອະນຸມັດຄຳຂໍ
+                              ກວດຕົວຕົນແລ້ວ
                             </button>
                             <button
                               className="reject-button"
@@ -765,7 +765,7 @@ export function TeacherApprovalPage({
                               type="button"
                             >
                               <X size={15} />
-                              ປະຕິເສດຄຳຂໍ
+                              ປະຕິເສດຜູ້ຂໍຮັບ
                             </button>
                           </div>
                         </div>
@@ -775,7 +775,7 @@ export function TeacherApprovalPage({
                   {approvalStatus === "awaiting_pickup" && approvedClaimRequestsForItem(claimRequests, item).length > 0 && (
                     <div className="approval-claim-queue approval-pickup-queue">
                       <div className="approval-claim-queue-head">
-                        <strong>ອະນຸມັດແລ້ວ — ລໍຖ້າມາຮັບຂອງ</strong>
+                        <strong>ກວດຕົວຕົນແລ້ວ — ລໍຖ້າສົ່ງຄືນ</strong>
                         <span>
                           {approvedClaimRequestsForItem(claimRequests, item).length.toLocaleString("lo-LA")} ຄົນ
                         </span>
@@ -787,7 +787,7 @@ export function TeacherApprovalPage({
                               {claim.claimantName || claim.claimantUsername || "ນັກສຶກສາ"}
                             </span>
                             <small className="approval-claim-message">
-                              ອະນຸມັດຕົວຕົນແລ້ວ — ເມື່ອນັກສຶກສາມາຮັບຂອງໃຫ້ບັນທຶກຄືນ
+                              ກວດຕົວຕົນແລ້ວ — ເມື່ອນັກສຶກສາມາຮັບຂອງໃຫ້ບັນທຶກສົ່ງຄືນ
                             </small>
                             <span className="approval-claim-status approval-claim-status-ready">ພ້ອມສົ່ງຄືນ</span>
                           </div>
@@ -799,7 +799,7 @@ export function TeacherApprovalPage({
                               type="button"
                             >
                               <PackageCheck size={15} />
-                              {returningItemId === item.id ? "ກຳລັງບັນທຶກ..." : "ມາຮັບຂອງແລ້ວ — ບັນທຶກຄືນ"}
+                              {returningItemId === item.id ? "ກຳລັງບັນທຶກ..." : "ບັນທຶກການສົ່ງຄືນ"}
                             </button>
                           </div>
                         </div>
@@ -848,7 +848,7 @@ export function TeacherApprovalPage({
                                       type="button"
                                     >
                                       <Check size={15} />
-                                      ອະນຸມັດຄຳຂໍ
+                                      ກວດຕົວຕົນແລ້ວ
                                     </button>
                                     <button
                                       className="reject-button"
@@ -861,7 +861,7 @@ export function TeacherApprovalPage({
                                       type="button"
                                     >
                                       <X size={15} />
-                                      ປະຕິເສດຄຳຂໍ
+                                      ປະຕິເສດຜູ້ຂໍຮັບ
                                     </button>
                                   </div>
                                 )}
@@ -877,7 +877,7 @@ export function TeacherApprovalPage({
                         type="button"
                       >
                         <PackageCheck size={17} />
-                        {returningItemId === item.id ? "ກຳລັງບັນທຶກ..." : "ສົ່ງຄືນເຈົ້າຂອງແລ້ວ"}
+                        {returningItemId === item.id ? "ກຳລັງບັນທຶກ..." : "ບັນທຶກການສົ່ງຄືນ"}
                       </button>
                     </div>
                   )}
@@ -907,16 +907,16 @@ export function TeacherApprovalPage({
             <EmptyState
               title={
                 approvalStatus === "claims"
-                  ? "ບໍ່ມີຄຳຂໍຮັບລໍຖ້າກວດ"
+                  ? "ບໍ່ມີຜູ້ຂໍຮັບລໍຖ້າກວດ"
                   : approvalStatus === "awaiting_pickup"
-                    ? "ບໍ່ມີລາຍການລໍຖ້າມາຮັບ"
+                    ? "ບໍ່ມີລາຍການລໍຖ້າສົ່ງຄືນ"
                     : "ບໍ່ພົບລາຍການຕາມໂຕກອງ"
               }
               description={
                 approvalStatus === "claims"
-                  ? "ເມື່ອນັກສຶກສາຂໍຮັບປະກາດຂອງທີ່ພົບ ລາຍການຈະສະແດງຢູ່ແຖບນີ້"
+                  ? "ເມື່ອນັກສຶກສາຂໍຮັບປະກາດຂອງທີ່ພົບ ລາຍການຈະສະແດງຢູ່ແຖບນີ້ເພື່ອໃຫ້ອາຈານກວດຕົວຕົນ"
                   : approvalStatus === "awaiting_pickup"
-                    ? "ເມື່ອອະນຸມັດຄຳຂໍຮັບແລ້ວ ລາຍການຈະມາລໍຖ້າບັນທຶກຄືນຂອງຢູ່ນີ້"
+                    ? "ເມື່ອກວດຕົວຕົນຜູ້ຂໍຮັບແລ້ວ ລາຍການຈະມາລໍຖ້າບັນທຶກສົ່ງຄືນຢູ່ນີ້"
                     : "ລອງປ່ຽນຄຳຄົ້ນຫາ ໝວດໝູ່ ຫຼື ສະຖານະທີ່ຕ້ອງການກວດສອບ"
               }
             />
@@ -983,7 +983,7 @@ export function TeacherApprovalPage({
             </p>
             <p>
               <CircleHelp size={16} />
-              ເມື່ອອະນຸມັດຄຳຂໍຮັບແລ້ວ ໄປແຖບ “ລໍຖ້າມາຮັບ” — ນັກສຶກສາມາຮັບຂອງແລ້ວຈຶ່ງບັນທຶກຄືນ.
+              ເມື່ອກວດຕົວຕົນຜູ້ຂໍຮັບແລ້ວ ໄປແຖບ “ລໍຖ້າສົ່ງຄືນ” — ຖ່າຍຮູບຜູ້ຮັບກັບສິ່ງຂອງ ແລ້ວບັນທຶກສົ່ງຄືນ.
             </p>
           </article>
         </aside>
@@ -1060,7 +1060,7 @@ export function TeacherApprovalPage({
                   ) : (
                     <>
                       <strong>ຍັງບໍ່ພົບບັນຊີເຈົ້າຂອງ</strong>
-                      <small>ເລືອກຈາກຄຳຂໍຮັບ ຫຼື ຄົ້ນຫານັກສຶກສາເພື່ອດຶງຂໍ້ມູນ</small>
+                      <small>ເລືອກຈາກຜູ້ຂໍຮັບ ຫຼື ຄົ້ນຫານັກສຶກສາເພື່ອດຶງຂໍ້ມູນ</small>
                     </>
                   )}
                 </div>
@@ -1083,8 +1083,8 @@ export function TeacherApprovalPage({
                                 updateReturnStudent(claim.claimantId);
                                 setReturnReceiverSource(
                                   claim.status === "approved"
-                                    ? "ຈາກຄຳຂໍຮັບທີ່ອະນຸມັດແລ້ວ"
-                                    : "ຈາກຄຳຂໍຮັບສິ່ງຂອງ",
+                                    ? "ຈາກຜູ້ຂໍຮັບທີ່ກວດແລ້ວ"
+                                    : "ຈາກຜູ້ຂໍຮັບສິ່ງຂອງ",
                                 );
                               }}
                               type="button"

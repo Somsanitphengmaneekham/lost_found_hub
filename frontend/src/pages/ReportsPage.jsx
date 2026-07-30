@@ -309,7 +309,7 @@ function buildReportWorkbook({ currentUser, isTeacher, scoped, members, metrics 
     rowsToSheet(isTeacher ? "Lost Posts" : "My Lost Posts", lostPostRows(scoped.lostReports), [
       "ID", "ຊື່ສິ່ງຂອງ", "ໝວດໝູ່", "ສະຖານທີ່ສູນຫາຍ", "ສະຖານະ",
     ]),
-    rowsToSheet("Similar Items", matchRows(scoped.matches), [
+    rowsToSheet("ລາຍການໃກ້ຄຽງ", matchRows(scoped.matches), [
       "ID", "ຄະແນນໃກ້ຄຽງ", "ສິ່ງຂອງສູນຫາຍ", "ສິ່ງຂອງທີ່ພົບ",
     ]),
     rowsToSheet(isTeacher ? "Claim Requests" : "My Claims", claimRequestRows(scoped.claimRequests), [

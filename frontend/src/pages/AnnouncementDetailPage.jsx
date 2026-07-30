@@ -258,7 +258,7 @@ export function AnnouncementDetailPage({
                 type="button"
               >
                 <ClipboardCheck size={18} />
-                ເປີດຟອມຂໍຮັບສິ່ງຂອງ
+                ຂໍຮັບສິ່ງຂອງນີ້
               </button>
             )}
             {!isLost && currentUser && !canClaimFound && !hasActiveClaim && !claimSubmitted && (
@@ -285,7 +285,7 @@ export function AnnouncementDetailPage({
           {!isLost && claimPanelOpen && canClaimFound && (
             <form className="claim-request-form" onSubmit={handleClaimSubmit} ref={claimPanelRef}>
               <header className="claim-request-form-head">
-                <span className="claim-request-form-eyebrow">ຟອມຂໍຮັບ · ປະກາດຂອງທີ່ພົບ</span>
+                <span className="claim-request-form-eyebrow">ຟອມຂໍຮັບສິ່ງຂອງ</span>
                 <strong>ຂໍຮັບສິ່ງຂອງ: {item.title}</strong>
                 <p>
                   ຟອມນີ້ໃຊ້ສະເພາະການຂໍຮັບຂອງທີ່ພົບ — ບໍ່ແມ່ນການແຈ້ງພົບ ຫຼື ແຈ້ງສູນຫາຍ.
@@ -300,11 +300,11 @@ export function AnnouncementDetailPage({
               </ol>
 
               <label className="claim-request-field">
-                <span>ຈຸດສັງເກດ / ຂໍ້ຄວາມເພີ່ມເຕີມ</span>
+                <span>ຫຼັກຖານທີ່ບອກວ່າເປັນຂອງທ່ານ</span>
                 <textarea
                   maxLength={1000}
                   onChange={(event) => setClaimMessage(event.target.value)}
-                  placeholder="ເຊັ່ນ ມີຮອຍສະເພາະ, ສີເຄສ, ຫຼື ຈະໄປຫ້ອງຄຸ້ມຄອງເວລາໃດ..."
+                  placeholder="ເຊັ່ນ ບອກຈຸດສັງເກດທີ່ຄົນທົ່ວໄປບໍ່ຮູ້, ຂອງຢູ່ໃນກະເປົາ, ຮອຍສະເພາະ, ຫຼື ເວລາທີ່ຈະໄປຢືນຢັນ..."
                   value={claimMessage}
                 />
               </label>

@@ -226,7 +226,7 @@ export function useFoundPosts({ currentUser, foundItems, loadAppData, categoryFo
       await approveFoundPost(id, currentUser.id);
       await loadAppData();
       if (setSelectedItemId) setSelectedItemId(`found-${id}`);
-      setToast("ອະນຸມັດແລ້ວ ລະບົບສ້າງລາຍການ match ຈາກຖານຂໍ້ມູນແລ້ວ");
+      setToast("ອະນຸມັດແລ້ວ ລະບົບສ້າງລາຍການໃກ້ຄຽງຈາກຖານຂໍ້ມູນແລ້ວ");
     } catch (error) {
       setToast(error.message || "ອະນຸມັດບໍ່ສຳເລັດ");
     } finally {

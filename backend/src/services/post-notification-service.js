@@ -371,7 +371,8 @@ export async function notifyLostOwnerItemFound(db, { lostPostId, matchCount = 0 
   const recipient = await findPostRecipient(db, "lost", lostPostId);
   if (!recipient) return { sent: 0, failed: 0, skipped: 1 };
 
-  const notificationsUrl = publicAppUrl("#notifications");
+  const detailHref = `#announcement-detail?lost=${encodeURIComponent(lostPostId)}`;
+  const detailUrl = publicAppUrl(detailHref);
   const matchText = Number(matchCount) > 0 ? `${Number(matchCount).toLocaleString("lo-LA")} ລາຍການ` : "ບໍ່ມີລາຍການໃກ້ຄຽງ";
   const intro =
     "ອາຈານໄດ້ກວດສອບແລ້ວ ແລະ ກົດແຈ້ງວ່າມີສິ່ງຂອງທີ່ອາດເປັນຂອງທ່ານຢູ່ທີ່ຫ້ອງຄຸ້ມຄອງ. ກະລຸນານຳບັດນັກສຶກສາ ແລະ ໄປຢືນຢັນລາຍລະອຽດກັບອາຈານກ່ອນຮັບຂອງ.";
@@ -389,8 +390,8 @@ export async function notifyLostOwnerItemFound(db, { lostPostId, matchCount = 0 
     title: "ອາຈານແຈ້ງວ່າພົບຂອງຂອງທ່ານແລ້ວ",
     body: `${recipient.title || "ປະກາດຂອງສູນຫາຍ"} · ${recipient.location_name || "ບໍ່ລະບຸສະຖານທີ່"}`,
     meta: "ສະເພາະນັກສຶກສາ · ນຳບັດໄປຢືນຢັນທີ່ຫ້ອງຄຸ້ມຄອງ",
-    href: "#notifications",
-    actionLabel: "ເບິ່ງແຈ້ງເຕືອນ",
+    href: detailHref,
+    actionLabel: "ເບິ່ງປະກາດ",
     tone: "green",
     priority: 1,
     entityType: "lost_post",
@@ -414,14 +415,14 @@ export async function notifyLostOwnerItemFound(db, { lostPostId, matchCount = 0 
           "",
           "ກະລຸນານຳບັດນັກສຶກສາ ແລະ ໄປຢືນຢັນລາຍລະອຽດທີ່ຫ້ອງຄຸ້ມຄອງກ່ອນຮັບຂອງ.",
           "",
-          `ເບິ່ງແຈ້ງເຕືອນ: ${notificationsUrl}`,
+          `ເບິ່ງປະກາດ: ${detailUrl}`,
         ].join("\n"),
         html: emailShell({
           heading: "ອາຈານແຈ້ງວ່າພົບຂອງຂອງທ່ານແລ້ວ",
           intro,
           rows,
-          actionUrl: notificationsUrl,
-          actionLabel: "ເບິ່ງແຈ້ງເຕືອນ",
+          actionUrl: detailUrl,
+          actionLabel: "ເບິ່ງປະກາດ",
         }),
       },
     ],
@@ -697,7 +698,7 @@ export async function notifyClaimantOfDecision(db, { claim, decision, reason = "
           `ສະບາຍດີ ${claimantName}`,
           "",
           approved
-            ? "ອາຈານໄດ້ຢືນຢັນຕົວຕົນຂອງທ່ານແລ້ວ ແລະ ອະນຸມັດຄຳຂໍຮັບສິ່ງຂອງ"
+            ? "ອາຈານໄດ້ກວດຢືນຢັນຕົວຕົນຂອງທ່ານແລ້ວ ແລະ ກຳລັງລໍຖ້າບັນທຶກສົ່ງຄືນ"
             : `ຄຳຂໍຮັບສິ່ງຂອງຂອງທ່ານ${resultLabel}`,
           `ລາຍການ: ${claim.foundTitle || "ບໍ່ລະບຸ"}`,
           `ສະຖານທີ່ພົບ: ${claim.locationName || "ບໍ່ລະບຸ"}`,

@@ -149,15 +149,15 @@ export function useLostPosts({
         const matchCount = Number(result?.matchCount ?? 0);
         setToast(
           matchCount > 0
-            ? `ສົ່ງປະກາດແລ້ວ ລະບົບພົບລາຍການທີ່ອາດກົງກັນ ${matchCount} ລາຍການ`
-            : "ສົ່ງປະກາດແລ້ວ ຍັງບໍ່ພົບລາຍການທີ່ຄ້າຍກັນເກີນ 70%",
+            ? `ສົ່ງປະກາດແລ້ວ ລະບົບພົບລາຍການໃກ້ຄຽງ ${matchCount} ລາຍການ`
+            : "ສົ່ງປະກາດແລ້ວ ຍັງບໍ່ພົບລາຍການໃກ້ຄຽງເກີນ 70%",
         );
       }
 
       await loadAppData();
       setEditingLostId(null);
       setLostForm(lostInitial);
-      navigateToPage?.("matching");
+      navigateToPage?.("dashboard");
     } catch (error) {
       setToast(error.message || "ບັນທຶກຂໍ້ມູນຂອງສູນຫາຍບໍ່ສຳເລັດ");
     } finally {

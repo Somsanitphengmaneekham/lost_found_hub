@@ -236,7 +236,7 @@ function TeacherDashboard({
         </DashboardPanel>
 
         <DashboardPanel
-          actionHref="#matches"
+          actionHref="#matching"
           actionLabel="ເບິ່ງລາຍການໃກ້ຄຽງ"
           className="dashboard-panel-large"
           icon={Link2}

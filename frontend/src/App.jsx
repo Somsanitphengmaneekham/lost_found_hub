@@ -407,7 +407,7 @@ function App() {
     });
 
     await loadAppData();
-    setToast("ສົ່ງຄຳຂໍຮັບແລ້ວ ກະລຸນາໄປຢືນຢັນຕົວຕົນທີ່ຫ້ອງຄຸ້ມຄອງ");
+    setToast("ສົ່ງຄຳຂໍຮັບແລ້ວ ອາຈານຈະໄດ້ຮັບແຈ້ງເຕືອນ ແລະ ທ່ານຕ້ອງໄປຢືນຢັນຕົວຕົນທີ່ຫ້ອງຄຸ້ມຄອງ");
     return claim;
   }
 
@@ -415,10 +415,10 @@ function App() {
     try {
       await approveClaimRequest(claimId, currentUser.id);
       await loadAppData();
-      setToast("ອະນຸມັດຄຳຂໍຮັບແລ້ວ — ລໍຖ້ານັກສຶກສາມາຮັບຂອງ ແລ້ວບັນທຶກຄືນ");
+      setToast("ກວດຕົວຕົນຜູ້ຂໍຮັບແລ້ວ — ລໍຖ້າບັນທຶກການສົ່ງຄືນ");
       return true;
     } catch (error) {
-      setToast(error.message || "ອະນຸມັດຄຳຂໍຮັບບໍ່ສຳເລັດ");
+      setToast(error.message || "ກວດຕົວຕົນຜູ້ຂໍຮັບບໍ່ສຳເລັດ");
       return false;
     }
   }

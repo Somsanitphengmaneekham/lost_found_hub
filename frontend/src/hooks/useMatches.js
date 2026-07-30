@@ -9,9 +9,9 @@ export function useMatches({ matchRows, lostReports, currentUser, loadAppData, s
     try {
       await updateMatchStatus(id, "confirmed", currentUser.id);
       await loadAppData();
-      setToast("ຢືນຢັນ match ແລ້ວ ສະຖານະຂອງສູນຫາຍ ແລະ ຂອງທີ່ພົບຖືກປ່ຽນເປັນຈັບຄູ່ແລ້ວ");
+      setToast("ຢືນຢັນລາຍການໃກ້ຄຽງແລ້ວ ສະຖານະຂອງສູນຫາຍ ແລະ ຂອງທີ່ພົບຖືກປ່ຽນເປັນພົບຂອງແລ້ວ");
     } catch (error) {
-      setToast(error.message || "ຢືນຢັນ match ບໍ່ສຳເລັດ");
+      setToast(error.message || "ຢືນຢັນລາຍການໃກ້ຄຽງບໍ່ສຳເລັດ");
     } finally {
       setMatchSaving(false);
     }
@@ -22,9 +22,9 @@ export function useMatches({ matchRows, lostReports, currentUser, loadAppData, s
     try {
       await updateMatchStatus(id, "rejected", currentUser.id);
       await loadAppData();
-      setToast("ປະຕິເສດ match ແລ້ວ ລາຍການນີ້ຈະບໍ່ຖືກນັບເປັນລາຍການທີ່ກົງກັນ");
+      setToast("ປະຕິເສດລາຍການໃກ້ຄຽງແລ້ວ ລາຍການນີ້ຈະບໍ່ຖືກສະແດງເປັນລາຍການແນະນຳ");
     } catch (error) {
-      setToast(error.message || "ປະຕິເສດ match ບໍ່ສຳເລັດ");
+      setToast(error.message || "ປະຕິເສດລາຍການໃກ້ຄຽງບໍ່ສຳເລັດ");
     } finally {
       setMatchSaving(false);
     }

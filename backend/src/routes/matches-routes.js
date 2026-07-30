@@ -49,7 +49,7 @@ async function requireTeacherOrLostOwner(db, memberId, lostOwnerId) {
   if (rows[0].role === "teacher" || Number(rows[0].id) === Number(lostOwnerId)) {
     return rows[0];
   }
-  throw createHttpError("ສາມາດຢືນຢັນ match ໄດ້ສະເພາະອາຈານ ຫຼື ເຈົ້າຂອງປະກາດຂອງສູນຫາຍ", 403);
+  throw createHttpError("ສາມາດຢືນຢັນລາຍການໃກ້ຄຽງໄດ້ສະເພາະອາຈານ ຫຼື ເຈົ້າຂອງປະກາດຂອງສູນຫາຍ", 403);
 }
 
 export function registerMatchesRoutes(app, pool) {
@@ -176,7 +176,7 @@ export function registerMatchesRoutes(app, pool) {
       const id = parsePositiveId(req.params.id);
       const nextStatus = String(req.body.status ?? "").trim();
       if (!["confirmed", "rejected"].includes(nextStatus)) {
-        throw createHttpError("ສະຖານະ match ຕ້ອງເປັນ confirmed ຫຼື rejected", 400);
+        throw createHttpError("ສະຖານະລາຍການໃກ້ຄຽງຕ້ອງເປັນ confirmed ຫຼື rejected", 400);
       }
 
       const [matchRows] = await connection.execute(
@@ -207,7 +207,7 @@ export function registerMatchesRoutes(app, pool) {
         `,
         [id],
       );
-      if (!matchRows.length) throw createHttpError("ບໍ່ພົບ match", 404);
+      if (!matchRows.length) throw createHttpError("ບໍ່ພົບລາຍການໃກ້ຄຽງ", 404);
 
       const match = matchRows[0];
       await requireTeacherOrLostOwner(
@@ -277,7 +277,7 @@ export function registerMatchesRoutes(app, pool) {
         dispatchEmailNotification(notifyMatchConfirmed(pool, { match: payload }), `match-confirmed:${id}`);
         dispatchEmailNotification(
           notifyTeachersOfReturnNeeded(pool, {
-            source: "ຢືນຢັນ match ແລ້ວ",
+            source: "ຢືນຢັນລາຍການໃກ້ຄຽງແລ້ວ",
             title: payload.foundTitle || payload.lostTitle,
             detail: `${payload.lostOwnerName || "ເຈົ້າຂອງ"} · ລໍຖ້າບັນທຶກຄືນຂອງ`,
             href: payload.foundPostId ? `#approval?found=${payload.foundPostId}` : "#approval",
@@ -334,7 +334,7 @@ export function registerMatchesRoutes(app, pool) {
         `,
         [id],
       );
-      if (!matchRows.length) throw createHttpError("ບໍ່ພົບ match", 404);
+      if (!matchRows.length) throw createHttpError("ບໍ່ພົບລາຍການໃກ້ຄຽງ", 404);
 
       const match = matchRows[0];
       if (match.found_status === "returned" || ["closed", "resolved", "deleted"].includes(match.lost_status)) {
@@ -371,7 +371,7 @@ export function registerMatchesRoutes(app, pool) {
           match.found_post_id,
           receivedBy,
           match.lost_post_id,
-          req.body.claimMessage ?? "ຄືນຂອງຜ່ານລະບົບ match",
+          req.body.claimMessage ?? "ຄືນຂອງຜ່ານລາຍການໃກ້ຄຽງ",
           returnedBy,
         ],
       );

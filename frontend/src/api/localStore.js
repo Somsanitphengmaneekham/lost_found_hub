@@ -1317,8 +1317,8 @@ export function localDeleteLostPost(id, actorId) {
 
 export function localUpdateMatchStatus(id, status) {
   const state = readState();
-  const match = findById(state.matches, id, "match");
-  if (!["suggested", "confirmed", "rejected"].includes(status)) throw localError("ສະຖານະ match ບໍ່ຖືກຕ້ອງ");
+  const match = findById(state.matches, id, "ລາຍການໃກ້ຄຽງ");
+  if (!["suggested", "confirmed", "rejected"].includes(status)) throw localError("ສະຖານະລາຍການໃກ້ຄຽງບໍ່ຖືກຕ້ອງ");
   match.status = status;
 
   if (status === "confirmed") {
@@ -1334,14 +1334,14 @@ export function localUpdateMatchStatus(id, status) {
 
 export function localReturnMatchedItem(id, body) {
   const state = readState();
-  const match = findById(state.matches, id, "match");
+  const match = findById(state.matches, id, "ລາຍການໃກ້ຄຽງ");
   const found = findById(state.foundPosts, match.foundPostId, "ປະກາດພົບຂອງ");
   const lost = findById(state.lostPosts, match.lostPostId, "ປະກາດຂອງສູນຫາຍ");
   const teacher = activeActorById(state, body.returnedByMemberId);
   const receiver = memberById(state, body.receivedByMemberId) ?? memberById(state, lost.ownerId);
 
   if (teacher.role !== "teacher") throw localError("returning items requires an active teacher account", 403);
-  if (match.status !== "confirmed") throw localError("return can only be recorded after the match is confirmed", 409);
+  if (match.status !== "confirmed") throw localError("ສາມາດບັນທຶກການຄືນໄດ້ຫຼັງຈາກຢືນຢັນລາຍການໃກ້ຄຽງແລ້ວ", 409);
   if (found.status === "returned" || ["closed", "resolved", "deleted"].includes(lost.status)) {
     throw localError("this item has already been returned", 409);
   }

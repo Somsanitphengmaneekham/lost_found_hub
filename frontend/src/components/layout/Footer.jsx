@@ -12,8 +12,6 @@ export function Footer({ currentUser, onGuideClick }) {
         <a href={currentUser ? "#dashboard" : "#home"} onClick={onGuideClick}>
           ວິທີໃຊ້ງານ
         </a>
-        <a href="#profile">ນະໂຍບາຍຄວາມເປັນສ່ວນຕົວ</a>
-        <a href="#matches">ເງື່ອນໄຂການໃຊ້ງານ</a>
         <a href="#approval">ຫ້ອງຄຸ້ມຄອງ</a>
         <a href="https://fns.nuol.edu.la" target="_blank" rel="noreferrer">
           fns.nuol.edu.la
